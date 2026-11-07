@@ -1,0 +1,8 @@
+fn main() {
+    var a i32 = 1
+    var b i64 = 2
+    print(a + b)
+    var c bool = 1
+}
+// error: mismatched types in '+': i32 and i64
+// error: expected bool, found i64

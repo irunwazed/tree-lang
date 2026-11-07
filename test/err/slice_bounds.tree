@@ -1,0 +1,7 @@
+fn main() {
+    xs := [..]i64{1, 2, 3}
+    var a i64 = 2
+    var b i64 = 1
+    print(xs[a..b], xs[0..9], xs[..len(xs)])
+}
+// error: cannot prove slice bounds 0 <= start <= end <= len(xs)

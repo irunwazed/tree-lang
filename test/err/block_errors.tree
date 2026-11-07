@@ -1,0 +1,12 @@
+fn run(f fn(i64) i64) i64 { return f(1) }
+fn keep(f fn(i64)) {
+    g := f
+}
+fn main() {
+    _ = run() { a, b => a }
+    _ = run() { it > 0 }
+    keep() { print(it) }
+}
+// error: the block takes 2 parameter(s), but 1 are passed
+// error: the block returns bool, expected i64
+// error: function parameter 'f' can only be called or passed to another function

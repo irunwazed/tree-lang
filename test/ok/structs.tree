@@ -1,0 +1,41 @@
+type Vec2 struct {
+    x, y f64
+}
+
+type Rect struct {
+    min, max Vec2
+    id       u32
+}
+
+fn area(r Rect) f64 {
+    return (r.max.x - r.min.x) * (r.max.y - r.min.y)
+}
+
+fn grow(r Rect, d f64) Rect {
+    out := r
+    out.min.x = out.min.x - d
+    out.min.y -= d
+    out.max.x += d
+    out.max.y += d
+    return out
+}
+
+fn main() {
+    r := Rect{min: Vec2{0.0, 0.0}, max: Vec2{x: 2.0, y: 3.0}, id: 7}
+    print(r)
+    print("area ", area(r))
+    g := grow(r, 1.0)
+    print("grown ", g.min, " ", g.max, " area ", area(g))
+    print("id ", r.id)
+    multi := Rect{
+        min: Vec2{1.0, 1.0},
+        max: Vec2{2.0, 2.0},
+        id:  1
+    }
+    print(multi.id)
+}
+// expect: Rect { min: Vec2 { x: 0.0, y: 0.0 }, max: Vec2 { x: 2.0, y: 3.0 }, id: 7 }
+// expect: area 6.0
+// expect: grown Vec2 { x: -1.0, y: -1.0 } Vec2 { x: 3.0, y: 4.0 } area 20.0
+// expect: id 7
+// expect: 1

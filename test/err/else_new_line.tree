@@ -1,0 +1,10 @@
+fn main() {
+    x := 1
+    if x > 0 {
+        print("a")
+    }
+    else {
+        print("b")
+    }
+}
+// error: 'else' must be on the same line as the closing '}'

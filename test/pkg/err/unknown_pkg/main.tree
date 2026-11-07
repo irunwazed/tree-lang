@@ -1,0 +1,7 @@
+package main
+
+fn main() {
+    var p geo.Point
+    _ = p
+}
+// error: unknown package 'geo'

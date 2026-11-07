@@ -1,0 +1,4 @@
+fn f(a, b i32) i32 { return a + b }
+fn main() { print(f(1, 2)) }
+// error: possible overflow: 'a + b'
+// error: help: prove the operands are small enough

@@ -1,0 +1,25 @@
+fn loop_a(n i64) i64 {
+    if n <= 0 { return 0 }
+    return loop_b(n - 1)
+}
+fn loop_b(n i64) i64 { return loop_a(n) }
+type Big struct {
+    a [8000]i64
+}
+#max_depth(100)
+fn deep(n i64) i64 {
+    var b Big
+    if n <= 0 { return 0 }
+    return deep(n - 1)
+}
+unsafe extern fn bad1(xs [..]i64)
+unsafe extern fn bad2(b Big) Big
+fn main() {
+    _ = loop_a(3)
+    _ = deep(5)
+}
+// error: 'loop_a' is recursive, so its stack use has no compile-time bound
+// error: 'loop_b' is recursive
+// error: estimated native stack use of 'main' is
+// error: type [..]i64 cannot be passed to C
+// error: an extern function can only return a number or bool

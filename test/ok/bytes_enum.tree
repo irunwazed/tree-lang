@@ -1,0 +1,17 @@
+type Shape enum {
+    Circle { r f64 }
+    Rect { w, h f32 }
+    Dot
+}
+
+fn main() {
+    shapes := [..]Shape{Shape.Circle{1.5}, Shape.Dot, Shape.Rect{2.0, 3.0}}
+    img := to_bytes(shapes)
+    var back [..]Shape
+    print(from_bytes(img, &back), " ", back)
+    var broken = copy(img)
+    if len(broken) > 16 { broken[16] = 9 }      // tag varian 9 tidak ada
+    print(from_bytes(broken, &back), " ", len(back))
+}
+// expect: true [Shape.Circle { r: 1.5 }, Shape.Dot, Shape.Rect { w: 2.0, h: 3.0 }]
+// expect: false 3

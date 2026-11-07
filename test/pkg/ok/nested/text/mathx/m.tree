@@ -1,0 +1,5 @@
+package mathx
+
+fn Name() [..]u8 { return str("mathx") }
+
+fn Square(x i64) i64 { return x *| x }

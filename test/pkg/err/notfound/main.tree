@@ -1,0 +1,14 @@
+package main
+
+import (
+    "nf/missing"
+    "github.com/someone/lib"
+)
+
+fn main() {
+    missing.F()
+    lib.G()
+}
+// error: package "nf/missing" not found
+// error: package "github.com/someone/lib" not found
+// error: external packages arrive with the package manager

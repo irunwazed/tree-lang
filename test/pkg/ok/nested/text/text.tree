@@ -1,0 +1,7 @@
+package text
+
+import "example.com/tools/text/mathx"
+
+fn Name() [..]u8 { return str("text") }
+
+fn Shout(n i64) [..]u8 { return str("SHOUT ", mathx.Square(n)) }

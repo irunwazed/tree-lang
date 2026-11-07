@@ -1,0 +1,16 @@
+// FFI: fungsi C ditandai 'unsafe extern fn'. ffi.c di samping file ini dikompilasi otomatis.
+unsafe extern fn hypot(x, y f64) f64           // dari libc/libm
+unsafe extern fn tl_sum_bytes(s []u8) i64        // []u8 → (ptr, len)
+unsafe extern fn tl_fill(out &i64, v i64)        // &i64 → ptr
+unsafe extern fn tl_is_even(v i64) bool          // bool ↔ int
+
+fn main() {
+    print(hypot(3.0, 4.0))
+    print(tl_sum_bytes("abc"), " ", tl_sum_bytes([3]u8{1, 2, 3}))
+    var x i64 = 5
+    tl_fill(&x, 42)
+    print(x, " ", tl_is_even(x), " ", tl_is_even(7))
+}
+// expect: 5.0
+// expect: 294 6
+// expect: 42 true false

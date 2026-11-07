@@ -1,0 +1,41 @@
+// Array tumbuh dipindahkan saat dikembalikan, dibebaskan otomatis saat scope selesai.
+fn squares(n i64) [..]i64 {
+    var out [..]i64
+    if n < 0 || n > 1000 { return out }
+    for i := range n { out.push(i * i) }
+    return out
+}
+
+fn split(n i64) ([..]i64, [..]i64) {
+    var evens [..]i64
+    var odds [..]i64
+    if n < 0 || n > 1000 { return evens, odds }
+    for i := range n {
+        if i % 2 == 0 { evens.push(i) } else { odds.push(i) }
+    }
+    return evens, odds
+}
+
+fn main() {
+    s := squares(6)
+    print(s)
+    e, o := split(7)
+    print(e, " ", o)
+    _, only := split(3)
+    print(only)
+    _ = squares(4)
+    var r [..]i64
+    for round := range 3 {
+        r = squares(round + 2)   // region lama dibebaskan dulu
+    }
+    print(r)
+    msg := "tree"
+    msg.append("-lang")
+    msg.push(33)
+    print(msg, " ", len(msg))
+}
+// expect: [0, 1, 4, 9, 16, 25]
+// expect: [0, 2, 4, 6] [1, 3, 5]
+// expect: [1]
+// expect: [0, 1, 4, 9]
+// expect: tree-lang! 10

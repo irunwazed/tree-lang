@@ -1,0 +1,4 @@
+fn get(xs []i64, i u64) i64 { return xs[i] }
+fn main() {}
+// error: cannot prove index 'i' is within the bounds of 'xs'
+// error: help: check it first, e.g. 'if i < len(xs) { ... }'

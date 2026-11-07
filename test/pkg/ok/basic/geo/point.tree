@@ -1,0 +1,11 @@
+package geo
+
+const Max = 100
+
+type Point struct {
+    X, Y i64
+}
+
+fn Dist2(p Point) i64 { return square(p.X) +| square(p.Y) }
+
+fn (p Point) Sum() i64 { return p.X +| p.Y }

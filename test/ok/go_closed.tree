@@ -1,0 +1,26 @@
+// Channel tertutup: send → false, recv → none (bukan panic seperti di Go).
+fn main() {
+    ch := chan[i64](2)
+    print(ch <- 1, " ", ch <- 2)
+    close(ch)
+    close(ch)                   // kedua kali: no-op
+    print(ch <- 3)
+    print(<-ch, " ", <-ch, " ", <-ch)
+    var n i64
+    for x := range ch { n = n +| x }
+    print("after range ", n)
+    done := chan[bool](0)
+    t := run signal(done)
+    if some v := <-done { print("got ", v) }
+    print(wait(t), " ", wait(t))
+}
+
+fn signal(done Chan[bool]) {
+    _ = done <- true
+}
+// expect: true true
+// expect: false
+// expect: some(1) some(2) none
+// expect: after range 0
+// expect: got true
+// expect: true false

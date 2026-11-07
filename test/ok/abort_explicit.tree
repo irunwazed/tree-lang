@@ -1,0 +1,6 @@
+fn main() {
+    print("before")
+    abort("stop here")
+}
+// expect: before
+// exit: 101

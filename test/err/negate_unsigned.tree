@@ -1,0 +1,5 @@
+fn main() {
+    var a u32 = 5
+    print(-a)
+}
+// error: cannot negate unsigned value of type u32

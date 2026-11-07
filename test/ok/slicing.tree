@@ -1,0 +1,22 @@
+fn total(s []i64) i64 {
+    var t i64
+    for _, x := range s { t = t +| x }
+    return t
+}
+
+fn main() {
+    xs := [..]i64{1, 2, 3, 4, 5, 6}
+    print(total(xs[1..3]), " ", total(xs[..2]), " ", total(xs[4..]), " ", total(xs[..]))
+    n := len(xs)
+    if n >= 4 {
+        print(total(xs[2..n]), " ", total(xs[..n - 2]))
+    }
+    a := [5]u8{104, 101, 108, 108, 111}
+    print(len(a[1..4]))
+    s := "hello world"
+    print(s[6..])
+}
+// expect: 5 3 11 21
+// expect: 18 10
+// expect: 3
+// expect: world

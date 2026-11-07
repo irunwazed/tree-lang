@@ -1,0 +1,32 @@
+type P struct {
+    x, y i32
+}
+
+fn main() {
+    var xs [..]i64
+    print(xs, " ", len(xs))
+    for i := range 10 { xs.push(i * i) }
+    print(xs)
+    print("len ", len(xs), " first ", xs[0])   // len(xs) >= 10 terbukti
+    for i, x := range xs {
+        if i >= 8 { print("i=", i, " x=", x) }
+    }
+    ys := copy(xs)
+    ys.append(xs)
+    ys[0] = -1
+    print(len(ys), " ", ys[0], " ", xs[0])
+    ps := [..]P{P{1, 2}, P{3, 4}}
+    ps.push(P{x: 5, y: 6})
+    print(ps)
+    var empty [..]u8
+    empty.append("abc")
+    print(empty)
+}
+// expect: [] 0
+// expect: [0, 1, 4, 9, 16, 25, 36, 49, 64, 81]
+// expect: len 10 first 0
+// expect: i=8 x=64
+// expect: i=9 x=81
+// expect: 20 -1 0
+// expect: [P { x: 1, y: 2 }, P { x: 3, y: 4 }, P { x: 5, y: 6 }]
+// expect: abc

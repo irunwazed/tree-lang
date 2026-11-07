@@ -1,0 +1,10 @@
+fn main() {
+    var xs [..]i64
+    xs.push(1)
+    var i i64
+    if i < len(xs) {
+        i++
+        print(xs[i])
+    }
+}
+// error: cannot prove index 'i' is within the bounds of 'xs'

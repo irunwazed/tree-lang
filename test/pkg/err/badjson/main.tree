@@ -1,0 +1,4 @@
+package main
+
+fn main() {}
+// error: forest.json:4:1: error: invalid forest.json: expected a key string

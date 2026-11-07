@@ -1,0 +1,4 @@
+fn main() {
+    a := [3]i64{1, 2}
+}
+// error: array literal has 2 element(s), but [3]i64 needs 3

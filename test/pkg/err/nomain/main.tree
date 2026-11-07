@@ -1,0 +1,7 @@
+package main
+
+import "nm/lib"
+
+fn main() { lib.F() }
+// error: 'main' can only be declared in package main
+// error: missing 'package lib' at the top of the file

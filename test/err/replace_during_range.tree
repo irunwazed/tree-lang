@@ -1,0 +1,12 @@
+// Celah dari M2: mengganti array yang sedang dilintasi akan membuat loop membaca region yang sudah dibebaskan.
+fn reset(xs &[..]i64) { xs = [..]i64{} }
+fn main() {
+    xs := [..]i64{1, 2, 3}
+    for _, x := range xs {
+        xs = [..]i64{}
+        reset(&xs)
+        print(x)
+    }
+}
+// error: cannot replace 'xs' while 'xs' is borrowed
+// error: cannot pass '&xs' while 'xs' is borrowed

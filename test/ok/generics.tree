@@ -1,0 +1,35 @@
+// Fungsi generik: tipe diinferensi dari argumen, diperiksa & dikompilasi per instansiasi.
+type Pair struct {
+    a, b i64
+}
+
+fn first[T](xs []T, fallback T) T {
+    if len(xs) == 0 { return fallback }
+    return xs[0]
+}
+
+fn swap_pair[A, B](a A, b B) (B, A) {
+    return b, a
+}
+
+fn repeat[T](x T, n i64) [..]T {
+    var out [..]T
+    if n < 0 || n > 1000 { return out }
+    for _i := range n { out.push(x) }
+    return out
+}
+
+fn main() {
+    print(max(3, 9), " ", min(2.5, 1.5), " ", max(-4, -7))
+    nums := [..]i64{4, 5, 6}
+    print(first(nums, 0), " ", first("hey", 63), " ", first([0]f64{}, 1.5))
+    x, y := swap_pair(1, true)
+    print(x, " ", y)
+    ps := repeat(Pair{1, 2}, 2)
+    sevens := repeat(7, 3)
+    print(ps, " ", sevens)
+}
+// expect: 9 1.5 -4
+// expect: 4 104 1.5
+// expect: true 1
+// expect: [Pair { a: 1, b: 2 }, Pair { a: 1, b: 2 }] [7, 7, 7]

@@ -1,0 +1,25 @@
+type Bag struct {
+    items [..]i64
+}
+fn take(xs []i64) {}
+fn work(b &Bag) {}
+fn gen[T](x T) {}
+fn main() {
+    ch := chan[[..]i64](4)
+    xs := [..]i64{1}
+    _ = ch <- xs
+    print(len(xs))
+    ys := [..]i64{2}
+    if len(ys) > 0 { _ = ch <- ys }
+    print(ys)
+    var b Bag
+    t := run work(&b)
+    t2 := run take(xs)
+    t3 := run gen(1)
+    bad := chan[&i64](1)
+}
+// error: 'xs' was moved into a channel and cannot be used here
+// error: 'ys' was moved into a channel and cannot be used here
+// error: argument 1 of 'work' would be shared with the new goroutine
+// error: argument 1 of 'take' would be shared with the new goroutine
+// error: 'run' needs a non-generic function

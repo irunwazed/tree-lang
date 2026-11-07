@@ -1,0 +1,10 @@
+// Aman: n naik 1 per langkah dan berhenti tepat di 1000, dibuktikan oleh fixpoint.
+fn main() {
+    var n i32
+    for {
+        n++
+        if n == 1000 { break }
+    }
+    print(n)
+}
+// expect: 1000

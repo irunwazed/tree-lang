@@ -1,0 +1,49 @@
+// Program pertama tree-lang: sintaks sederhana ala Go, pembuktian keamanan saat compile.
+
+type Point struct {
+    x, y i64
+}
+
+const LIMIT = 10
+
+fn (p Point) area() i64 {
+    if p.x < 0 || p.x > 1000 || p.y < 0 || p.y > 1000 {
+        return 0
+    }
+    return p.x * p.y
+}
+
+fn divmod(a, b u32) (u32, u32) {
+    if b == 0 {
+        return 0, 0 // tanpa pemeriksaan ini: compile error "possible division by zero"
+    }
+    return a / b, a % b
+}
+
+fn main() {
+    print("halo dari tree-lang!")
+    p := Point{x: 3, y: 4}
+    print("p = ", p, ", area = ", p.area())
+
+    q, r := divmod(17, 5)
+    print("17 / 5 = ", q, " sisa ", r)
+
+    var total i64 // nilai nol otomatis
+    for i := range 1..LIMIT + 1 {
+        total += i // terbukti tidak overflow (analisis induksi)
+    }
+    print("jumlah 1..10 = ", total)
+
+    for total > 30 {
+        total -= 10
+    }
+    for {
+        total++
+        if total >= 40 { break }
+    }
+    print("total = ", total)
+
+    var big u64 = 18446744073709551615
+    print("u64 max = ", big, ", saturasi = ", big +| 1, ", wrap = ", big +% 1)
+    print("float: ", 1.5 * 2.0, " ", 0.1 + 0.2)
+}

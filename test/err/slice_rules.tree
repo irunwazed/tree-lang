@@ -1,0 +1,7 @@
+fn set(s []i64) { s[0] = 1 }
+fn keep(s []i64) []i64 { return s }
+fn grow(xs [..]i64) {}
+fn main() {}
+// error: slices are read-only
+// error: slices cannot be returned
+// error: growable arrays are passed as a read-only slice or by reference

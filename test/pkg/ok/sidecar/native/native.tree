@@ -1,0 +1,5 @@
+package native
+
+unsafe extern fn tl_pkg_triple(v i64) i64
+
+fn Triple(v i64) i64 { return tl_pkg_triple(v) }

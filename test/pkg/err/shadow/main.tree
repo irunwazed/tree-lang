@@ -1,0 +1,10 @@
+package main
+
+import "sh/lib"
+
+fn main() {
+    lib := 3
+    print(lib, lib.F())
+}
+// error: 'lib' shadows the imported package 'lib'
+// error: use of package 'lib' without a selector

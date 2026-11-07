@@ -1,0 +1,5 @@
+package main
+
+const Answer = 42
+
+fn greet() [..]u8 { return str("hello") }

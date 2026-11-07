@@ -1,0 +1,8 @@
+fn main() {
+    var a u8 = 256
+    var b i8 = -129
+    var c u32 = -1
+}
+// error: integer literal 256 does not fit in u8
+// error: integer literal -129 does not fit in i8
+// error: integer literal -1 does not fit in u32

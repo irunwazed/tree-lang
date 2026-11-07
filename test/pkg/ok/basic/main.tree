@@ -1,0 +1,30 @@
+package main
+
+import "app/geo"
+
+fn helper() i64 { return 42 }       // nama yang sama dengan fungsi privat di geo: tidak bentrok
+
+fn main() {
+    p := geo.Point{X: 3, Y: 4}
+    print(geo.Dist2(p), " ", p.Sum(), " ", geo.Max)
+    var ps [..]geo.Point
+    ps.push(p)
+    ps.push(geo.Point{1, 1})
+    print(len(ps), " ", ps[1])
+    c := geo.Color.Green
+    match c {
+        Red { print("red") }
+        Green { print("green") }
+    }
+    s := geo.Shape.Square{Side: 5}
+    print(geo.Area(s), " ", geo.Area(geo.Shape.Empty), " ", s)
+    k := geo.New(7)
+    print(k.Id, " ", k.Secret())
+    print(helper(), " ", geo.Helped())
+}
+// expect: 25 7 100
+// expect: 2 geo.Point { X: 1, Y: 1 }
+// expect: green
+// expect: 25 0 geo.Shape.Square { Side: 5 }
+// expect: 7 49
+// expect: 42 1042

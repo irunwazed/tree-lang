@@ -1,0 +1,6 @@
+package main
+
+import "cyc/a"
+
+fn main() { print(a.A()) }
+// error: import cycle: cyc/a -> cyc/b -> cyc/a

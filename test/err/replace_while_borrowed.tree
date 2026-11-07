@@ -1,0 +1,8 @@
+fn main() {
+    var xs [..]i64
+    xs.push(1)
+    first := &xs[0]
+    xs = [..]i64{}
+    print(first)
+}
+// error: cannot replace 'xs' while 'xs' is borrowed

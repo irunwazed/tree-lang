@@ -1,0 +1,14 @@
+type Shape enum {
+    Rect { w, h f64 }
+    Dot
+}
+fn main() {
+    var s = Shape.Rect{1.0, 2.0}
+    match s {
+        Rect(&r) {
+            s = Shape.Dot          // r menunjuk ke dalam s: s tidak boleh diganti di sini
+        }
+        _ { }
+    }
+}
+// error: cannot replace 's' while 's' is borrowed

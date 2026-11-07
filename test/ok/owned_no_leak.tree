@@ -1,0 +1,30 @@
+// 100.000 putaran x 3 region (reservasi 4 GiB masing-masing): lulus hanya jika semua dibebaskan.
+type Pair struct {
+    a [..]i64
+    b [..]u8
+}
+
+fn (p &Pair) refill() {
+    p.a = [..]i64{1, 2, 3}      // region lama p.a dibebaskan
+    p.b.append("xy")
+}
+
+fn make() Pair {
+    var p Pair
+    p.a.push(7)
+    return p
+}
+
+fn main() {
+    var n i64
+    for round := range 100000 {
+        p := make()
+        p.refill()
+        var q Pair
+        q.b.push(1)
+        if round % 2 == 0 { continue }
+        if len(p.a) == 3 { n++ }
+    }
+    print(n)
+}
+// expect: 50000

@@ -1,0 +1,6 @@
+fn f(a, b u32) u32 { return a / b }
+fn g(a, b u32) u32 { return a % b }
+fn main() { print(f(1, 1), g(1, 1)) }
+// error: possible division by zero: divisor in 'a / b'
+// error: possible division by zero: divisor in 'a % b'
+// error: help: check it first, e.g. 'if d == 0 { return ... }'

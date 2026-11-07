@@ -1,0 +1,3 @@
+import "fmt"
+fn main() {}
+// error: imports need a module: no forest.json found

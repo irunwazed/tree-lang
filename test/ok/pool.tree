@@ -1,0 +1,32 @@
+// Pool generasional: handle basi menghasilkan none, bukan data milik pemilik baru.
+type Enemy struct {
+    hp i32
+    x, y f32
+}
+
+fn main() {
+    var enemies Pool[Enemy]
+    a := enemies.add(Enemy{hp: 10, x: 1.0, y: 2.0})
+    b := enemies.add(Enemy{hp: 20, x: 3.0, y: 4.0})
+    print(a, " ", b, " count ", enemies.count())
+    print(enemies.get(a))
+    print(enemies.remove(a), " ", enemies.remove(a), " ", enemies.contains(a), " count ", enemies.count())
+    c := enemies.add(Enemy{hp: 30, x: 0.0, y: 0.0})   // memakai ulang slot milik a
+    print(c, " old handle -> ", enemies.get(a), " new -> ", enemies.get(c))
+    print(enemies.set(a, Enemy{hp: 99, x: 0.0, y: 0.0}), " ", enemies.set(b, Enemy{hp: 21, x: 3.0, y: 4.0}))
+    if some e := enemies.get(b) { print("b hp ", e.hp) }
+    var total i64
+    for i := range 1000 {
+        h := enemies.add(Enemy{hp: 1, x: 0.0, y: 0.0})
+        if i % 2 == 0 { _ = enemies.remove(h) }
+        total++
+    }
+    print("count ", enemies.count(), " added ", total)
+}
+// expect: Handle(0#1) Handle(1#1) count 2
+// expect: some(Enemy { hp: 10, x: 1.0, y: 2.0 })
+// expect: true false false count 1
+// expect: Handle(0#3) old handle -> none new -> some(Enemy { hp: 30, x: 0.0, y: 0.0 })
+// expect: false true
+// expect: b hp 21
+// expect: count 502 added 1000

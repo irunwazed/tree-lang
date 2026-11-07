@@ -1,0 +1,7 @@
+fn f() i64 { return 1 }
+fn main() {
+    f()
+    1 + 2
+}
+// error: result of type i64 is not used
+// error: discard it explicitly with '_ = f()'

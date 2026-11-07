@@ -1,0 +1,26 @@
+// Invarian loop ditemukan lewat fixpoint + widening berambang.
+fn main() {
+    var n i32
+    for {
+        n += 1
+        if n >= 1000 { break }
+    }
+    print("loop ", n)
+    var k u8
+    for k < 250 { k += 5 }
+    print("while ", k)
+    var a i64 = 1
+    var b i64 = 1
+    var steps i64
+    for b < 1000000 {
+        t := a + b
+        a = b
+        b = t
+        steps++
+        if steps >= 100 { break }
+    }
+    print("fib ", b, " steps ", steps)
+}
+// expect: loop 1000
+// expect: while 250
+// expect: fib 1346269 steps 29

@@ -1,0 +1,8 @@
+fn make() [..]i64 {
+    var xs [..]i64
+    return xs
+}
+fn main() {
+    print(len(make()))
+}
+// error: a new value owning a growable array must be stored in a variable first

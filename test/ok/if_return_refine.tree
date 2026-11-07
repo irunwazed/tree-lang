@@ -1,0 +1,15 @@
+// Pengganti guard: setelah 'if ... { return }', kondisinya terbukti salah.
+fn pct(part, whole u64) u64 {
+    if whole == 0 {
+        return 0
+    }
+    if part > 1000000 {
+        return 0
+    }
+    return part * 100 / whole
+}
+
+fn main() {
+    print(pct(1, 4), " ", pct(5, 0), " ", pct(3, 3))
+}
+// expect: 25 0 100

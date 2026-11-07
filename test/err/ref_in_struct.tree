@@ -1,0 +1,5 @@
+type Node struct {
+    value &i64
+}
+fn main() {}
+// error: struct fields cannot be references

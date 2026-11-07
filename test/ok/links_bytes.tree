@@ -1,0 +1,91 @@
+// Pohon biner di dalam satu array: anak ditautkan dengan Link[Node] (offset u32 dari awal array),
+// lalu disimpan dengan to_bytes dan dimuat ulang dengan from_bytes yang memvalidasi semuanya.
+type Node struct {
+    value i64
+    left, right Link[Node]?
+}
+
+fn insert(nodes &[..]Node, v i64) {
+    nl := nodes.push_link(Node{value: v, left: none, right: none})
+    if len(nodes) == 1 { return }
+    if some new_link := nl {
+        var cur = nodes.link(0)
+        for {
+            if some l := cur {
+                if some n := nodes.at(l) {
+                    var m = n
+                    if v < n.value {
+                        if some _ := n.left { cur = n.left } else {
+                            m.left = new_link
+                            _ = nodes.put(l, m)
+                            return
+                        }
+                    } else {
+                        if some _ := n.right { cur = n.right } else {
+                            m.right = new_link
+                            _ = nodes.put(l, m)
+                            return
+                        }
+                    }
+                } else { return }
+            } else { return }
+        }
+    }
+}
+
+#max_depth(70)
+fn walk(nodes []Node, l Link[Node]?, depth i64, out &[..]i64) {
+    if depth > 64 { return }
+    if some x := l {
+        if some n := nodes.at(x) {
+            walk(nodes, n.left, depth + 1, out)
+            out.push(n.value)
+            walk(nodes, n.right, depth + 1, out)
+        }
+    }
+}
+
+fn sorted(nodes []Node) [..]i64 {
+    var out [..]i64
+    walk(nodes, nodes.link(0), 0, &out)
+    return out
+}
+
+fn main() {
+    var tree [..]Node
+    vals := [7]i64{50, 30, 70, 20, 40, 60, 80}
+    for _, v := range vals { insert(&tree, v) }
+    s1 := sorted(tree)
+    print(s1)
+    image := to_bytes(tree)
+    print("bytes ", len(image))
+    var loaded [..]Node
+    print("load ok ", from_bytes(image, &loaded))
+    s2 := sorted(loaded)
+    print(s2)
+    // rusakkan link pertama (field 'left' node 0): offset di luar batas → ditolak
+    var bad = copy(image)
+    if len(bad) > 26 { bad[26] = 200 }
+    var other [..]Node
+    print("tampered ", from_bytes(bad, &other), " len ", len(other))
+    // potong data → ditolak; tipe berbeda → hash berbeda → ditolak
+    if len(image) > 0 { print("truncated ", from_bytes(image[..len(image) - 1], &other)) }
+    var nums [..]i64
+    print("wrong type ", from_bytes(image, &nums))
+    // nilai tunggal & enum/optional/bool tervalidasi
+    var flag bool
+    tb := to_bytes(true)
+    print(from_bytes(tb, &flag), " ", flag)
+    var b2 = to_bytes(true)
+    if len(b2) > 16 { b2[16] = 2 }
+    print("bool 2 -> ", from_bytes(b2, &flag))
+}
+// expect: [20, 30, 40, 50, 60, 70, 80]
+// expect: bytes 110
+// expect: load ok true
+// expect: [20, 30, 40, 50, 60, 70, 80]
+// expect: tampered false len 0
+// expect: truncated false
+// expect: wrong type false
+// expect: true true
+// expect: bool 2 -> false

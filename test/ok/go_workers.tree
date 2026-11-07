@@ -1,0 +1,50 @@
+// Worker pool: goroutine tidak berbagi memori; data lewat channel (disalin).
+type Job struct {
+    n i64
+}
+
+type Result struct {
+    n, digits i64
+}
+
+fn count_digits(n i64) i64 {
+    var x = n
+    var d i64 = 1
+    for x >= 10 {
+        x = x / 10
+        if d < 100 { d++ }
+    }
+    return d
+}
+
+fn worker(jobs Chan[Job], results Chan[Result]) {
+    for job := range jobs {
+        ok := results <- Result{n: job.n, digits: count_digits(job.n)}
+        if !ok { return }
+    }
+}
+
+fn main() {
+    jobs := chan[Job](16)
+    results := chan[Result](16)
+    var ts [..]Task
+    for _i := range 8 { ts.push(run worker(jobs, results)) }
+    // produsen terpisah agar main bisa langsung mengumpulkan hasil
+    feeder := run feed(jobs)
+    var total i64
+    for _i := range 1000 {
+        if some r := <-results { total = total +| r.digits }
+    }
+    var ok i64
+    if wait(feeder) { ok++ }
+    for _, t := range ts {
+        if wait(t) { ok++ }
+    }
+    print("digits ", total, " tasks ok ", ok)
+}
+
+fn feed(jobs Chan[Job]) {
+    for i := range 1000 { _ = jobs <- Job{n: i * 7} }
+    close(jobs)
+}
+// expect: digits 3840 tasks ok 9

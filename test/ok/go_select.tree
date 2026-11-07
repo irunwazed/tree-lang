@@ -1,0 +1,49 @@
+fn ticker(out Chan[i64], n i64) {
+    for i := range n {
+        sleep_ms(1)
+        _ = out <- i
+    }
+    close(out)
+}
+
+fn main() {
+    a := chan[i64](0)
+    b := chan[i64](0)
+    ta := run ticker(a, 5)
+    tb := run ticker(b, 5)
+    var got i64
+    var a_done = false
+    var b_done = false
+    for !(a_done && b_done) {
+        select {
+            x := <-a {
+                if some _ := x { if got < 100 { got++ } } else { a_done = true }
+            }
+            y := <-b {
+                if some _ := y { if got < 100 { got++ } } else { b_done = true }
+            }
+        }
+    }
+    print("received ", got)
+    _ = wait(ta)
+    _ = wait(tb)
+    quiet := chan[i64](1)
+    select {
+        v := <-quiet { print("unexpected ", v) }
+        timeout(20) { print("timeout") }
+    }
+    select {
+        v := <-quiet { print("unexpected ", v) }
+        default { print("nothing ready") }
+    }
+    select {
+        ok := quiet <- 5 { print("sent ", ok) }
+        default { print("full") }
+    }
+    print(<-quiet)
+}
+// expect: received 10
+// expect: timeout
+// expect: nothing ready
+// expect: sent true
+// expect: some(5)

@@ -1,0 +1,19 @@
+const SIZE u32 = 8
+const SCALE = 3
+const ON = true
+
+fn main() {
+    var acc u32
+    for i := range SIZE { acc += i * SIZE }
+    print(acc, " ", SCALE * 2, " ", ON)
+    v := 1
+    {
+        v := 2
+        print("inner ", v)
+    }
+    v2 := v + 10
+    print("outer ", v2)
+}
+// expect: 224 6 true
+// expect: inner 2
+// expect: outer 11

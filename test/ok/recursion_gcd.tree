@@ -1,0 +1,10 @@
+#max_depth(100)
+fn gcd(a, b u64) u64 {
+    if b == 0 { return a }
+    return gcd(b, a % b)
+}
+
+fn main() {
+    print(gcd(1071, 462), " ", gcd(17, 5), " ", gcd(0, 9))
+}
+// expect: 21 1 9

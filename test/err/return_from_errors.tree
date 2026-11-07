@@ -1,0 +1,20 @@
+fn work() i64 {
+    helper()
+    return 1
+}
+fn helper() {
+    return 5 from work
+}
+fn other() { return true from work }
+fn g[T](x T) T { return x }
+fn h() { return from nothing }
+fn k() { return 1 from g }
+fn main() {
+    helper()
+    _ = work()
+    other()
+}
+// error: this call may 'return ... from work', but no call to 'work' is active here
+// error: expected i64, found bool
+// error: unknown function 'nothing'
+// error: cannot 'return ... from' a generic function

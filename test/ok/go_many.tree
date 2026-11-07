@@ -1,0 +1,22 @@
+// 100.000 goroutine berumur pendek: stack & region tiap goroutine dilepas saat selesai.
+fn job(n i64, out Chan[i64]) {
+    var xs [..]i64
+    for i := range 10 { xs.push(i) }
+    _ = out <- n +| xs[9]
+}
+
+fn main() {
+    out := chan[i64](1024)
+    var total i64
+    for round := range 100 {
+        var ts [..]Task
+        for i := range 1000 { ts.push(run job(i, out)) }
+        for _i := range 1000 {
+            if some v := <-out { total = total +| v }
+        }
+        for _, t := range ts { _ = wait(t) }
+        _ = round
+    }
+    print(total)
+}
+// expect: 50850000

@@ -1,0 +1,36 @@
+// 'return e from f': fungsi di tengah tetap punya tanda tangan biasa (tanpa Result / error param).
+type User struct {
+    age i64
+    id  i64
+}
+
+fn load(lines []i64) ([..]User, i64) {
+    var users [..]User
+    for i, line := range lines {
+        users.push(parse_user(line, i))
+    }
+    return users, 0
+}
+
+// gagal: langsung kembali dari 'load' dengan array kosong + kode error
+fn parse_user(line i64, i i64) User {
+    if line < 0 {
+        return [..]User{}, line from load
+    }
+    if line > 150 {
+        return [..]User{}, 1000 +| i from load
+    }
+    return User{age: line, id: i}
+}
+
+fn main() {
+    good, e1 := load([3]i64{30, 41, 25})
+    print(good, " err=", e1)
+    bad, e2 := load([4]i64{30, -7, 25, 99})
+    print(bad, " err=", e2)
+    old, e3 := load([2]i64{10, 200})
+    print(old, " err=", e3)
+}
+// expect: [User { age: 30, id: 0 }, User { age: 41, id: 1 }, User { age: 25, id: 2 }] err=0
+// expect: [] err=-7
+// expect: [] err=1001

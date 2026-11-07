@@ -1,0 +1,45 @@
+// Method dengan receiver (tanpa class): nama method per tipe.
+type Counter struct {
+    n u32
+}
+
+type Rect struct {
+    w, h i64
+}
+
+type Square struct {
+    side i64
+}
+
+fn (c Counter) bumped() Counter {
+    if c.n >= 1000 { return c }
+    return Counter{n: c.n + 1}
+}
+
+fn (c Counter) value() u32 {
+    return c.n
+}
+
+fn (r Rect) area() i64 {
+    if r.w < 0 || r.w > 10000 || r.h < 0 || r.h > 10000 { return 0 }
+    return r.w * r.h
+}
+
+fn (s Square) area() i64 {
+    return Rect{s.side, s.side}.area()
+}
+
+fn (r Rect) scaled(k i64) Rect {
+    if k < 0 || k > 100 { return r }
+    if r.w < 0 || r.w > 100000 || r.h < 0 || r.h > 100000 { return r }
+    return Rect{r.w * k, r.h * k}
+}
+
+fn main() {
+    c := Counter{n: 41}
+    print(c.bumped().value(), " ", c.value())
+    r := Rect{w: 3, h: 4}
+    print(r.area(), " ", Square{5}.area(), " ", r.scaled(10).area())
+}
+// expect: 42 41
+// expect: 12 25 1200

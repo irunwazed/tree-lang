@@ -1,0 +1,25 @@
+type Color enum {
+    Red
+    Green
+    Blue
+}
+fn f(c Color) i64 {
+    match c {
+        Red { return 1 }
+    }
+    return 0
+}
+fn g(n i64) {
+    match n {
+        1 { }
+    }
+}
+fn h(o i64?) {
+    match o {
+        some(x) { }
+    }
+}
+fn main() {}
+// error: match is not exhaustive: missing Green, Blue
+// error: match is not exhaustive: missing other values
+// error: match is not exhaustive: missing none

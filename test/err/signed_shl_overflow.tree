@@ -1,0 +1,5 @@
+fn main() {
+    var x i8 = 64
+    print(x << 1)
+}
+// error: possible overflow: 'x << 1'

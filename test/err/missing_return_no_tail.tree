@@ -1,0 +1,7 @@
+// Tidak ada return implisit: ekspresi terakhir harus ditulis dengan 'return'.
+fn f() i64 {
+    1
+}
+fn main() { print(f()) }
+// error: result of type i64 is not used
+// error: function 'f' may reach its end without returning a value

@@ -1,0 +1,5 @@
+package a
+
+import "cyc/b"
+
+fn A() i64 { return b.B() }

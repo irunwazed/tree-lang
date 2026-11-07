@@ -1,0 +1,26 @@
+package coll
+
+fn Biggest[T](xs []T, fallback T) T {
+    var best = fallback
+    for _, x := range xs { best = larger(best, x) }
+    return best
+}
+
+fn larger[T](a, b T) T {
+    if a > b { return a }
+    return b
+}
+
+fn Count[T](xs []T) i64 { return tally(len(xs)) }
+
+fn tally(n i64) i64 { return n }
+
+fn Pick[T](xs []T, i i64, fallback T) T {
+    return xs.get(i) ?? fallback
+}
+
+fn Twice(xs []i64, f fn(i64) i64) [..]i64 {
+    var out [..]i64
+    for _, x := range xs { out.push(f(x)) }
+    return out
+}

@@ -1,0 +1,5 @@
+fn main() {
+    var x u8 = 255
+    x++
+}
+// error: possible overflow: 'x + 1'

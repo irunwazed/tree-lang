@@ -1,0 +1,17 @@
+// Banyak region dibuat dan dibebaskan (termasuk lewat break/continue), plus satu array besar.
+fn main() {
+    var total i64
+    for round := range 2000 {
+        var xs [..]i64
+        for i := range 500 { xs.push(i) }
+        if round % 7 == 0 { continue }
+        if round == 1999 { break }
+        total = total +| xs[499]
+    }
+    print("total ", total)
+    var big [..]i64
+    for i := range 5000000 { big.push(i) }
+    print("big ", len(big), " last ", big[4999999])
+}
+// expect: total 854787
+// expect: big 5000000 last 4999999

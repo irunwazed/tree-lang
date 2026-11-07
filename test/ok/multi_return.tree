@@ -1,0 +1,18 @@
+fn divmod(a, b u64) (u64, u64, bool) {
+    if b == 0 { return 0, 0, false }
+    return a / b, a % b, true
+}
+
+fn forward(a, b u64) (u64, u64, bool) {
+    return divmod(a, b)
+}
+
+fn main() {
+    q, r, ok := divmod(47, 5)
+    print(q, " ", r, " ", ok)
+    q2, _, ok2 := forward(1, 0)
+    print(q2, " ", ok2)
+    _ = divmod(1, 1)
+}
+// expect: 9 2 true
+// expect: 0 false

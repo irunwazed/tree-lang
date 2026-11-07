@@ -1,0 +1,45 @@
+// Struct yang memiliki array tumbuh + method dengan receiver '&T' (tanpa class).
+type Stack struct {
+    items [..]i64
+    pushes u32
+}
+
+fn (s &Stack) push(v i64) {
+    s.items.push(v)
+    if s.pushes < 1000000 { s.pushes++ }
+}
+
+fn (s &Stack) top() i64 {
+    if len(s.items) == 0 { return -1 }
+    return s.items[len(s.items) - 1]
+}
+
+fn (s &Stack) size() i64 { return len(s.items) }
+
+fn (s &Stack) clear() {
+    s.items = [..]i64{}     // region lama dibebaskan
+}
+
+fn make_stack(n i64) Stack {
+    var s Stack
+    if n < 0 || n > 100 { return s }
+    for i := range n { s.push(i * 10) }
+    return s                // dipindahkan ke pemanggil
+}
+
+fn main() {
+    var s Stack
+    s.push(1)
+    s.push(2)
+    print(s.top(), " ", s.size(), " ", s)
+    s.clear()
+    print(s.top(), " ", s.size())
+    t := make_stack(4)
+    print(t.items, " pushes ", t.pushes)
+    u := Stack{items: [..]i64{7, 8}, pushes: 0}
+    print(u.top())
+}
+// expect: 2 2 Stack { items: [1, 2], pushes: 2 }
+// expect: -1 0
+// expect: [0, 10, 20, 30] pushes 4
+// expect: 8

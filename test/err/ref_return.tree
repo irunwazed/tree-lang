@@ -1,0 +1,3 @@
+fn first(xs &[..]i64) &i64 { return xs }
+fn main() {}
+// error: references cannot be returned yet

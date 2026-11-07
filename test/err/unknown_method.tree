@@ -1,0 +1,12 @@
+type P struct {
+    x i64
+}
+fn (p P) get() i64 { return p.x }
+fn main() {
+    p := P{1}
+    print(p.missing())
+    v := 5
+    print(v.get())
+}
+// error: type P has no method 'missing'
+// error: type i64 has no method 'get'

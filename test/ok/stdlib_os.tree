@@ -1,0 +1,35 @@
+// stdlib OS: semua kegagalan dilaporkan lewat bool / T?, bukan panic.
+fn main() {
+    path := "tl_stdlib_test.tmp"
+    msg := str("hello ", 42, " ", 1.5, " ", true, " ", [3]i64{1, 2, 3})
+    print(msg)
+    print("write ", write_file(path, msg), " exists ", file_exists(path))
+    print("append ", append_file(path, "!"))
+    var back [..]u8
+    print("read ", read_file(path, &back), " -> ", back)
+    print("delete ", delete_file(path), " exists ", file_exists(path))
+    var missing [..]u8
+    print("read missing ", read_file("no/such/file.tmp", &missing))
+    print(parse_int("123"), " ", parse_int("-9223372036854775808"), " ", parse_int("9223372036854775808"), " ",
+          parse_int("12a"), " ", parse_int(""))
+    print(parse_float("2.5"), " ", parse_float("x"))
+    print(arg_count() >= 1, " ", equal("abc", "abc"), " ", equal("abc", "abd"), " ", index_of("hello", 108))
+    var p [..]u8
+    print("env PATH ", env("PATH", &p), " missing ", env("TL_SURELY_UNSET_VAR", &p))
+    t1 := clock_ns()
+    sleep_ms(20)
+    t2 := clock_ns()
+    print("slept ", t2 -| t1 >= 10000000, " wall ", time_ns() > 1600000000000000000)
+    _ = random_seed()
+}
+// expect: hello 42 1.5 true [1, 2, 3]
+// expect: write true exists true
+// expect: append true
+// expect: read true -> hello 42 1.5 true [1, 2, 3]!
+// expect: delete true exists false
+// expect: read missing false
+// expect: some(123) some(-9223372036854775808) none none none
+// expect: some(2.5) none
+// expect: true true false some(2)
+// expect: env PATH true missing false
+// expect: slept true wall true

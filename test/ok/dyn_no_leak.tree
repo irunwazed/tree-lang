@@ -1,0 +1,21 @@
+// 100.000 array dengan reservasi 4 GiB masing-masing = 400 TB jika tidak dibebaskan
+// (melebihi ruang alamat 128 TB). Lulus hanya jika setiap region benar-benar dikembalikan.
+fn make(n i64) [..]i64 {
+    var out [..]i64
+    if n < 0 || n > 100 { return out }
+    for i := range n { out.push(i) }
+    return out
+}
+
+fn main() {
+    var count i64
+    for round := range 100000 {
+        xs := make(10)
+        ys := copy(xs)
+        if round % 3 == 0 { continue }
+        count += 1
+        if len(xs) >= 10 && len(ys) > 0 { _ = ys[0] +| xs[9] }
+    }
+    print(count)
+}
+// expect: 66666

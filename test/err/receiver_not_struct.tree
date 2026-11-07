@@ -1,0 +1,11 @@
+fn (x i64) double() i64 { return x }
+type P struct {
+    v i64
+}
+fn (p P) v() i64 { return 1 }
+fn (p P) m() i64 { return 1 }
+fn (p P) m() i64 { return 2 }
+fn main() {}
+// error: methods can only be declared on struct and enum types, not i64
+// error: type 'P' has both a field and a method named 'v'
+// error: duplicate method 'P.m'

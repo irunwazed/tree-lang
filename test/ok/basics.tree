@@ -1,0 +1,25 @@
+// Literal, aritmetika terbukti aman, dan print.
+fn main() {
+    a := 7
+    b := 3
+    print(a + b, " ", a - b, " ", a * b, " ", a / b, " ", a % b)
+    print(-7 / 2, " ", -7 % 2)
+    var x u8 = 200
+    var y u8 = 55
+    print(x + y)
+    var big i64 = 9223372036854775807
+    var small i64 = -9223372036854775808
+    print(big, " ", small)
+    print(0xff, " ", 0b1010, " ", 0o17, " ", 1_000_000)
+    print(true, " ", false, " ", !true)
+    print("tab[\t] quote[\"] hex[\x41]")
+    print(6 & 3, " ", 6 | 3, " ", 6 ^ 3, " ", ~0, " ", 1 << 10, " ", -16 >> 2)
+}
+// expect: 10 4 21 2 1
+// expect: -3 -1
+// expect: 255
+// expect: 9223372036854775807 -9223372036854775808
+// expect: 255 10 15 1000000
+// expect: true false false
+// expect: tab[	] quote["] hex[A]
+// expect: 2 7 5 -1 1024 -4

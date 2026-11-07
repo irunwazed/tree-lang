@@ -1,0 +1,8 @@
+// Setelah menulis lewat referensi lokal, rentang root dilupakan.
+fn main() {
+    var x u8 = 1
+    r := &x
+    r = 255
+    print(x + 1)
+}
+// error: possible overflow: 'x + 1'

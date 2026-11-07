@@ -1,0 +1,6 @@
+fn main() {
+    var xs [..]i64
+    ys := xs
+}
+// error: growable arrays are not copied implicitly
+// error: help: make an explicit copy with 'copy(xs)'

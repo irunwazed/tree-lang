@@ -1,0 +1,6 @@
+fn swap(a, b &i64) {}
+fn main() {
+    var x i64
+    swap(&x, &x)
+}
+// error: 'x' is borrowed twice in the same call

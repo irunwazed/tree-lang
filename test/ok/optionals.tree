@@ -1,0 +1,48 @@
+type User struct {
+    id  u32
+    age u8?
+}
+
+fn find(xs []i64, want i64) i64? {
+    for i, x := range xs {
+        if x == want { return i }      // i64 otomatis menjadi some(i)
+    }
+    return none
+}
+
+fn main() {
+    xs := [..]i64{5, 7, 9}
+    print(find(xs, 9), " ", find(xs, 4))
+    if some i := find(xs, 7) {
+        print("found at ", i)
+    } else {
+        print("missing")
+    }
+    v := find(xs, 1) ?? -1
+    print("v = ", v)
+    match find(xs, 5) {
+        some(i) { print("some ", i) }
+        none { print("none") }
+    }
+    u := User{id: 1, age: none}
+    w := User{id: 2, age: 30}
+    print(u, " ", w)
+    print(xs.get(1), " ", xs.get(10), " ", xs.get(-1))
+    var big i64 = 300
+    var small i64 = 25
+    print(big as? u8, " ", small as? u8, " ", -1 as? u32, " ", 2.5 as? i32, " ", 1e30 as? i64)
+    var a u8 = 200
+    var b u8 = 100
+    print(a +? b, " ", a -? b, " ", b -? a, " ", a *? b, " ", a /? 0, " ", a /? 7, " ", a %? 7)
+    var m i32 = -2147483648
+    print(m /? -1, " ", m /? 2)
+}
+// expect: some(2) none
+// expect: found at 1
+// expect: v = -1
+// expect: some 0
+// expect: User { id: 1, age: none } User { id: 2, age: some(30) }
+// expect: some(7) none none
+// expect: none some(25) none some(2) none
+// expect: none some(100) none none none some(28) some(4)
+// expect: none some(-1073741824)

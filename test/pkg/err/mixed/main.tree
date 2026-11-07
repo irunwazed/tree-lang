@@ -1,0 +1,6 @@
+package main
+
+import "mx/lib"
+
+fn main() { lib.F() }
+// error: files in folder 'lib' must be 'package lib', found 'package other'

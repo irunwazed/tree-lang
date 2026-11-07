@@ -1,0 +1,12 @@
+type S struct {
+    items [..]i64
+}
+fn (s &S) add() { s.items.push(1) }
+fn make() S {
+    var s S
+    return s
+}
+fn main() {
+    make().add()
+}
+// error: a new value owning a growable array must be stored in a variable first

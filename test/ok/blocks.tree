@@ -1,0 +1,59 @@
+// Trailing block: dispesialisasi per pemanggilan (bisa di-inline menjadi loop langsung).
+fn twice(x i64, f fn(i64) i64) i64 {
+    return f(f(x))
+}
+
+fn apply_all(xs []i64, f fn(i64) i64) [..]i64 {
+    return map(xs, f)            // parameter fungsi diteruskan ke fungsi generik lain
+}
+
+fn inc(x i64) i64 {
+    if x >= 1000000 { return x }
+    return x + 1
+}
+
+fn main() {
+    xs := [..]i64{1, 2, 3, 4, 5, 6}
+    evens := xs.filter() { it % 2 == 0 }
+    print(evens)
+    squares := xs.map() { x => x *| x }
+    print(squares)
+    total := xs.fold(0) { acc, x => acc +| x }
+    print("total ", total, " count>3 ", xs.count() { it > 3 })
+    print(xs.any() { it == 4 }, " ", xs.all() { it > 0 }, " ", xs.find() { it > 4 })
+    print(twice(5) { x => x *| 3 }, " ", twice(5, inc))
+    incd := apply_all(xs, inc)
+    print(incd)
+    // block boleh mengubah variabel pemanggil (dianalisis seperti badan loop)
+    var sum i64
+    var hits i64
+    xs.each() {
+        sum = sum +| it
+        if hits < 100 { hits++ }
+    }
+    print("sum ", sum, " hits ", hits)
+    // block berisi beberapa statement dan return
+    labels := xs.map() { x =>
+        if x % 3 == 0 { return 3 }
+        return x % 3
+    }
+    print(labels)
+    words := [..]u8{3, 1, 2}
+    sort(&words) { a, b => a < b }
+    wide := words.map() { it as u64 }
+    print(wide)
+    var people [..]i64
+    people.append([5]i64{30, 10, 50, 20, 40})
+    sort(&people) { a, b => a > b }
+    print(people)
+}
+// expect: [2, 4, 6]
+// expect: [1, 4, 9, 16, 25, 36]
+// expect: total 21 count>3 3
+// expect: true true some(4)
+// expect: 45 7
+// expect: [2, 3, 4, 5, 6, 7]
+// expect: sum 21 hits 6
+// expect: [1, 2, 3, 1, 2, 3]
+// expect: [1, 2, 3]
+// expect: [50, 40, 30, 20, 10]

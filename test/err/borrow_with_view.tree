@@ -1,0 +1,6 @@
+fn f(xs &[..]i64, s []i64) {}
+fn main() {
+    var xs [..]i64
+    f(&xs, xs)
+}
+// error: 'xs' is borrowed while also passed as a slice 'xs'

@@ -1,0 +1,5 @@
+fn main() {
+    f := 2.5
+    print(f as i64, f as! i64)
+}
+// error: float to integer must use 'as|'

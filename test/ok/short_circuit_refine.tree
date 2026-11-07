@@ -1,0 +1,7 @@
+fn ratio(a, b i64) bool {
+    return b > 0 && a / b > 2
+}
+fn main() {
+    print(ratio(10, 3), " ", ratio(10, 0), " ", ratio(5, 5))
+}
+// expect: true false false

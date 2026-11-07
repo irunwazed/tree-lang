@@ -1,0 +1,22 @@
+type Shape enum {
+    Circle { r f64 }
+    Dot
+}
+fn main() {
+    a := Shape.Square
+    b := Shape.Circle
+    c := Shape.Dot{}
+    s := Shape.Dot
+    match s {
+        Circle(c) { }
+        Dot(x) { }
+        Dot { }
+        Hexagon { }
+    }
+}
+// error: enum 'Shape' has no variant 'Square'
+// error: variant 'Circle' has fields
+// error: variant 'Dot' has no fields
+// error: variant 'Dot' has no payload to bind
+// error: variant 'Dot' is matched twice
+// error: enum 'Shape' has no variant 'Hexagon'

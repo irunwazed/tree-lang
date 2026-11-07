@@ -1,0 +1,8 @@
+package main
+
+import "ffi/native"
+
+fn main() {
+    print(native.Triple(14))
+}
+// expect: 42

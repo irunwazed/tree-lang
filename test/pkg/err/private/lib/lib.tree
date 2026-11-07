@@ -1,0 +1,14 @@
+package lib
+
+const limit = 3
+
+type Key struct {
+    Id i64
+    secret i64
+}
+
+fn New() Key { return Key{1, 2} }
+
+fn hidden() i64 { return 1 }
+
+fn (k Key) peek() i64 { return k.secret }

@@ -1,0 +1,3 @@
+extern fn nope()
+fn main() {}
+// error: foreign functions are declared 'unsafe extern fn'

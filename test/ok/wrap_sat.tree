@@ -1,0 +1,22 @@
+fn main() {
+    var a u8 = 250
+    var b u8 = 10
+    print(a +% b, " ", a +| b, " ", b -% a, " ", b -| a, " ", a *% b, " ", a *| b)
+    var c i8 = -100
+    var d i8 = 100
+    print(c -% d, " ", c -| d, " ", d +| d, " ", c *| d)
+    var big i64 = 300
+    var neg i64 = -5
+    print(big as% u8, " ", big as| u8, " ", neg as| u32, " ", neg as% u8)
+    f := 3.99
+    huge := 1e300
+    nan := 0.0 / 0.0
+    print(f as| i32, " ", -f as| i32, " ", huge as| i64, " ", nan as| i64, " ", -1.5 as| u8)
+    var w u32 = 7
+    print(w as u64, " ", w as i64, " ", w as f64, " ", true as u8)
+}
+// expect: 4 255 16 0 196 255
+// expect: 56 -128 127 -128
+// expect: 44 255 0 251
+// expect: 3 -3 9223372036854775807 0 0
+// expect: 7 7 7.0 1

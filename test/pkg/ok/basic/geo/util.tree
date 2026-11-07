@@ -1,0 +1,8 @@
+package geo
+
+// privat: dipakai file lain di package yang sama
+fn square(x i64) i64 { return x *| x }
+
+fn helper() i64 { return 1000 }
+
+fn Helped() i64 { return helper() +| 42 }

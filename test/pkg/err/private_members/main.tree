@@ -1,0 +1,19 @@
+package main
+
+import "pm/lib"
+
+fn (k lib.Key) Extra() i64 { return 0 }
+
+fn main() {
+    k := lib.New()
+    print(k.secret)
+    print(k.peek())
+    bad := lib.Key{Id: 1, secret: 2}
+    pos := lib.Key{1, 2}
+    print(k.Id, " ", k.Get())
+}
+// error: field 'secret' of 'lib.Key' is not exported
+// error: method 'peek' of 'lib.Key' is not exported
+// error: field 'secret' of 'lib.Key' is not exported
+// error: cannot build 'lib.Key' here: field 'secret' is not exported
+// error: cannot declare methods on lib.Key, which belongs to another package

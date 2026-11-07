@@ -1,0 +1,27 @@
+// Penyempitan rentang bekerja juga pada field struct.
+type Counter struct {
+    n u32
+}
+
+type Box2 struct {
+    size  Counter
+    scale i64
+}
+
+fn area(b Box2) i64 {
+    if b.scale < 0 || b.scale > 1000 { return 0 }
+    s := b.size.n as i64
+    if s > 1000 { return 0 }
+    return s * b.scale
+}
+
+fn main() {
+    // literal struct: rentang field diketahui langsung
+    p := Counter{n: 7}
+    print(p.n * 3)
+    q := p
+    q.n += 1
+    print(q.n, " ", area(Box2{size: Counter{n: 12}, scale: 5}))
+}
+// expect: 21
+// expect: 8 60

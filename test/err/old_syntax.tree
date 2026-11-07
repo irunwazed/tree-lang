@@ -1,0 +1,7 @@
+fn main() {
+    let x = 1
+    while x < 3 { }
+    guard x > 0 else { return }
+}
+// error: 'let' is not a tree-lang keyword
+// error: help: declare with 'x := value' or 'var x T'

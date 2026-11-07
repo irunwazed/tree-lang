@@ -1,0 +1,3 @@
+package other
+
+fn G() {}

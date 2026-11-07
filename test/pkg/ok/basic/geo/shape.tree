@@ -1,0 +1,28 @@
+package geo
+
+type Color enum {
+    Red
+    Green
+}
+
+type Shape enum {
+    Square { Side i64 }
+    Empty
+}
+
+fn Area(s Shape) i64 {
+    match s {
+        Square(q) { return square(q.Side) }
+        Empty { return 0 }
+    }
+}
+
+// struct dengan field privat: hanya bisa dibuat lewat New
+type Key struct {
+    Id i64
+    secret i64
+}
+
+fn New(id i64) Key { return Key{Id: id, secret: square(id)} }
+
+fn (k Key) Secret() i64 { return k.secret }

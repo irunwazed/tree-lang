@@ -1,0 +1,20 @@
+package main
+
+import "conc/work"
+
+fn main() {
+    jobs := chan[work.Job](8)
+    out := chan[i64](128)
+    var ts [..]Task
+    for _i := range 4 { ts.push(run work.Worker(jobs, out)) }
+    for i := range 100 { _ = jobs <- work.Job{N: i} }
+    close(jobs)
+    var total i64
+    for _i := range 100 {
+        if some v := <-out { total = total +| v }
+    }
+    var ok i64
+    for _, t := range ts { if wait(t) { ok++ } }
+    print(total, " ", ok)
+}
+// expect: 9900 4

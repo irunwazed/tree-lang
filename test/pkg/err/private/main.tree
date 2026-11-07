@@ -1,0 +1,12 @@
+package main
+
+import "priv/lib"
+
+fn main() {
+    print(lib.hidden())
+    print(lib.limit)
+    var k lib.key
+}
+// error: 'hidden' is not exported by package 'lib'
+// error: 'limit' is not exported by package 'lib'
+// error: 'key' is not exported by package 'lib'

@@ -1,0 +1,27 @@
+// [..]T dipindahkan lewat channel: hanya region-nya yang berpindah (tanpa salinan).
+fn producer(out Chan[[..]i64]) {
+    for round := range 4 {
+        var xs [..]i64
+        for i := range 100000 { xs.push(i) }
+        _ = out <- xs                // xs dipindahkan; tidak bisa dipakai lagi di sini
+        _ = round
+    }
+    close(out)
+}
+
+fn main() {
+    ch := chan[[..]i64](1)
+    t := run producer(ch)
+    var total i64
+    for xs := range ch {
+        if len(xs) == 100000 { total = total +| xs[99999] }
+    }
+    print(total, " ", wait(t))
+    // channel tertutup: nilai yang gagal dikirim dibebaskan, tidak bocor
+    c2 := chan[[..]i64](0)
+    close(c2)
+    ys := [..]i64{1, 2, 3}
+    print(c2 <- ys)
+}
+// expect: 399996 true
+// expect: false

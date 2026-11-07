@@ -1,0 +1,26 @@
+// Slice []T: tampilan baca-saja untuk parameter; menerima array tetap, array tumbuh, dan string.
+fn sum_bytes(s []u8) u64 {
+    var total u64
+    for _, b := range s {
+        total += b as u64        // terbukti: len <= 2^40, b <= 255
+    }
+    return total
+}
+
+fn count(s []u8, c u8) i64 {
+    var n i64
+    for _, b := range s {
+        if b == c { n++ }
+    }
+    return n
+}
+
+fn main() {
+    fixed := [3]u8{1, 2, 3}
+    var grow [..]u8
+    grow.append("hello")
+    print(sum_bytes(fixed), " ", sum_bytes(grow), " ", sum_bytes("AB"))
+    print(count("banana", 97), " ", count(grow, 108))
+}
+// expect: 6 532 131
+// expect: 3 2

@@ -1,0 +1,28 @@
+// 100.000 lompatan melewati frame yang memiliki array tumbuh: semua region harus dibebaskan.
+fn outer(n i64) i64 {
+    var keep [..]i64
+    keep.push(n)
+    return middle(n)
+}
+
+fn middle(n i64) i64 {
+    var tmp [..]i64
+    for i := range 100 { tmp.push(i) }
+    deep(n)
+    return -1
+}
+
+fn deep(n i64) {
+    var more [..]u8
+    more.append("abc")
+    if n % 2 == 0 { return n from outer }
+}
+
+fn main() {
+    var hits i64
+    for i := range 100000 {
+        if outer(i) == i { hits++ }
+    }
+    print(hits)
+}
+// expect: 50000

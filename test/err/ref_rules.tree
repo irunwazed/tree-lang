@@ -1,0 +1,11 @@
+fn inc(n &i64) { n++ }
+fn main() {
+    var x i64
+    inc(x)
+    r := &x
+    y := &r
+    _ = &x
+}
+// error: argument 1 of 'inc' is a reference: write '&x'
+// error: possible overflow: 'n + 1'
+// error: '&' is only used for arguments to '&T' parameters and in 'r := &x'

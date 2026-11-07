@@ -1,0 +1,3 @@
+fn get(xs []i64, i i64) i64 { return xs[i] }
+fn main() {}
+// error: index 'i' may be negative

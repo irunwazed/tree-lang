@@ -1,0 +1,5 @@
+fn main() {
+    a := [2]i64{1, 2}
+    a.push(3)
+}
+// error: only growable arrays '[..]T' can push, found [2]i64

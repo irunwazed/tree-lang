@@ -1,0 +1,5 @@
+fn f(x i64) i64 {
+    if x > 0 { return 1 }
+}
+fn main() { print(f(1)) }
+// error: function 'f' may reach its end without returning a value

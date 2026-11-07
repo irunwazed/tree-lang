@@ -1,0 +1,10 @@
+package main
+
+import (
+    "un/lib"
+    lib "un/lib"
+)
+
+fn main() {}
+// error: "un/lib" imported and not used
+// error: 'lib' is imported twice

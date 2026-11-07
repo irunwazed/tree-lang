@@ -1,0 +1,5 @@
+fn main() {
+    var a [100000]i64
+}
+// error: is too large for the native stack (max 64 KiB)
+// error: help: use a growable array '[..]T'

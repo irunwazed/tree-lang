@@ -1,0 +1,8 @@
+fn main() {
+    var o i64? = 5
+    print(o + 1)
+    var n i64 = none
+    x := none
+}
+// error: mismatched types in '+': i64? and i64
+// error: 'none' needs a known optional type here

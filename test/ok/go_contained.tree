@@ -1,0 +1,23 @@
+// abort di satu goroutine hanya menghentikan goroutine itu.
+fn fragile(v i64, out Chan[i64]) {
+    var buf [..]i64
+    for i := range 1000 { buf.push(i) }
+    if v == 3 { abort("bad input") }
+    _ = out <- v
+}
+
+fn main() {
+    out := chan[i64](16)
+    var ts [..]Task
+    for i := range 6 { ts.push(run fragile(i, out)) }
+    var ok i64
+    var failed i64
+    for _, t := range ts {
+        if wait(t) { ok++ } else { failed++ }
+    }
+    close(out)
+    var got i64
+    for _ := range out { if got < 100 { got++ } }
+    print("ok ", ok, " failed ", failed, " messages ", got)
+}
+// expect: ok 5 failed 1 messages 5

@@ -1,0 +1,6 @@
+fn main() {
+    var x u8 = 16
+    var y u8 = 16
+    print(x * y)
+}
+// error: possible overflow: 'x * y' may be in [256, 256]

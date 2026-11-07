@@ -1,0 +1,7 @@
+fn main() {
+    a := [5]i64{1, 2, 3, 4, 5}
+    print(a[5])
+    for i := range 6 { print(a[i]) }
+}
+// error: cannot prove index '5' is within the bounds of 'a' (index range [5, 5], length [5, 5])
+// error: cannot prove index 'i' is within the bounds of 'a' (index range [0, 5], length [5, 5])

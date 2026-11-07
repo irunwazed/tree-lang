@@ -1,0 +1,6 @@
+fn f(a, b i32) i32 {
+    if b == 0 { return 0 }
+    return a / b
+}
+fn main() { print(f(1, 1)) }
+// error: may compute -2147483648 / -1

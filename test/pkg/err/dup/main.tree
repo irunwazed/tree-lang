@@ -1,0 +1,6 @@
+package main
+
+import "dp/lib"
+
+fn main() { lib.F() }
+// error: duplicate function 'lib.F'

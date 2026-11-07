@@ -1,0 +1,45 @@
+type Shape enum {
+    Circle { r f64 }
+    Rect { w, h f64 }
+    Dot
+}
+
+fn (s Shape) area() f64 {
+    match s {
+        Circle(c) { return 3.0 * c.r * c.r }
+        Rect(r) { return r.w * r.h }
+        Dot { return 0.0 }
+    }
+}
+
+fn describe(s Shape) {
+    match s {
+        Circle { print("circle") }
+        _ { print("not a circle") }
+    }
+}
+
+fn main() {
+    var shapes [..]Shape
+    shapes.push(Shape.Circle{r: 2.0})
+    shapes.push(Shape.Rect{w: 3.0, h: 4.0})
+    shapes.push(Shape.Dot)
+    for _, s := range shapes {
+        print(s, " area=", s.area())
+    }
+    describe(shapes[0])
+    describe(shapes[2])
+    // ubah payload di tempat lewat binding '&'
+    var sh = Shape.Rect{1.0, 1.0}
+    match sh {
+        Rect(&r) { r.w = 10.0 }
+        _ { }
+    }
+    print(sh)
+}
+// expect: Shape.Circle { r: 2.0 } area=12.0
+// expect: Shape.Rect { w: 3.0, h: 4.0 } area=12.0
+// expect: Shape.Dot area=0.0
+// expect: circle
+// expect: not a circle
+// expect: Shape.Rect { w: 10.0, h: 1.0 }

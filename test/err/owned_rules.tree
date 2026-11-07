@@ -1,0 +1,13 @@
+type Bag struct {
+    items [..]i64
+}
+fn by_value(b Bag) {}
+fn (b Bag) count() i64 { return 0 }
+fn give(b &Bag) Bag { return b }
+fn main() {
+    var b Bag
+    c := b
+}
+// error: values of type Bag own growable arrays and are passed by reference
+// error: only local variables can be moved out with 'return'
+// error: values of type Bag own growable arrays and are not copied implicitly

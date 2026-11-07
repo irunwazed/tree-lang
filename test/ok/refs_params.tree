@@ -1,0 +1,51 @@
+// Parameter referensi '&T': fungsi boleh mengubah milik pemanggil. Pemanggil menulis '&x'.
+type Point struct {
+    x, y i64
+}
+
+fn bump(n &u8) {
+    if n < 255 { n++ }      // n adalah alias: auto-deref, rentangnya tetap dilacak
+}
+
+fn reset(p &Point) {
+    p.x = 0
+    p.y = 0
+}
+
+fn fill(xs &[..]i64, n i64) {
+    if n < 0 || n > 1000 { return }
+    for i := range n { xs.push(i) }
+}
+
+fn swap(a, b &i64) {
+    t := a
+    a = b
+    b = t
+}
+
+fn main() {
+    var c u8 = 254
+    bump(&c)
+    bump(&c)
+    print("c = ", c)
+    p := Point{3, 4}
+    reset(&p)
+    print(p)
+    var xs [..]i64
+    fill(&xs, 5)
+    fill(&xs, 2)
+    print(xs, " len ", len(xs))
+    var a i64 = 1
+    var b i64 = 2
+    swap(&a, &b)
+    print(a, " ", b)
+    // setelah pemanggilan dengan &x, compiler melupakan rentang x (bisa berubah)
+    var k u8 = 1
+    bump(&k)
+    if k < 200 { print("k+1 = ", k + 1) }
+}
+// expect: c = 255
+// expect: Point { x: 0, y: 0 }
+// expect: [0, 1, 2, 3, 4, 0, 1] len 7
+// expect: 2 1
+// expect: k+1 = 3

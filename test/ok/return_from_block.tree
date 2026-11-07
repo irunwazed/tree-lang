@@ -1,0 +1,29 @@
+// non-local return: 'return ... from' di dalam block keluar dari fungsi tempat block ditulis
+fn first_big(xs []i64, limit i64) i64? {
+    xs.each() {
+        if it > limit { return it from first_big }
+    }
+    return none
+}
+
+#max_depth(20)
+fn depth(n i64) i64 {
+    // pemanggilan aktif TERDALAM dari 'depth' yang menerima nilai
+    if n <= 0 { return inner() }
+    if n > 10 { return 0 }
+    r := depth(n - 1)
+    if r > 1000 { return 0 }
+    return r + 1
+}
+
+fn inner() i64 {
+    return 100 from depth
+}
+
+fn main() {
+    xs := [..]i64{3, 9, 4, 12, 7}
+    print(first_big(xs, 8), " ", first_big(xs, 20))
+    print(depth(3))
+}
+// expect: some(9) none
+// expect: 103

@@ -1,0 +1,52 @@
+// Setiap operasi di sini aman karena DIBUKTIKAN oleh if/loop, tanpa cek runtime.
+fn safe_add(a, b i32) i32 {
+    if a < -1000000 || a > 1000000 { return 0 }
+    if b < -1000000 || b > 1000000 { return 0 }
+    return a + b
+}
+
+fn safe_div(a, b i64) i64 {
+    if b <= 0 { return 0 }
+    return a / b
+}
+
+fn to_byte(x i64) u8 {
+    if x < 0 || x > 255 { return 0 }
+    return x as! u8
+}
+
+fn shift(x, k u64) u64 {
+    return x >> (k & 63)
+}
+
+fn main() {
+    print(safe_add(1000, 2000), " ", safe_div(-9, 2), " ", to_byte(200), " ", shift(1024, 67))
+    // akumulator dalam loop: dibatasi oleh analisis induksi
+    var total i64
+    for i := range 1..101 { total += i }
+    print("sum ", total)
+    var sq u32
+    for i := range 100 {
+        for j := range 100 {
+            sq += (i * j) as! u32
+        }
+    }
+    print("grid ", sq)
+    var down i32 = 100
+    for _i := range 10 { down -= 7 }
+    print("down ", down)
+    // penyempitan dari if
+    n := safe_div(1000, 3)
+    if n < 1000 && n > -1000 {
+        m := n * n
+        print("square ", m)
+    }
+    var i u8 = 250
+    if i < 255 { print("next ", i + 1) }
+}
+// expect: 3000 -4 200 128
+// expect: sum 5050
+// expect: grid 24502500
+// expect: down 30
+// expect: square 110889
+// expect: next 251

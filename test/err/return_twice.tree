@@ -1,0 +1,6 @@
+fn f() ([..]i64, [..]i64) {
+    var xs [..]i64
+    return xs, xs
+}
+fn main() {}
+// error: 'xs' is returned twice

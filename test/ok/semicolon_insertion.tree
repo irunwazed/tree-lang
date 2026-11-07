@@ -1,0 +1,20 @@
+// Baris baru mengakhiri statement; ';' tetap boleh untuk beberapa statement di satu baris.
+fn add(a,
+    b i64) i64 {
+    if a < -1000 || a > 1000 || b < -1000 || b > 1000 { return 0 }
+    return a +
+        b
+}
+
+fn main() {
+    x := 1; y := 2
+    print(add(
+        x,
+        y,
+    ))
+    /* komentar
+       multi-baris */ z := x
+    print(z)
+}
+// expect: 3
+// expect: 1

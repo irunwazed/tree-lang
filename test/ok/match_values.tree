@@ -1,0 +1,23 @@
+// match pada integer/bool: setiap cabang menyempitkan rentang nilainya.
+fn name(d u8) u8 {
+    match d {
+        0 { return 100 }
+        1, 2 { return d + 200 }   // di cabang ini d ∈ [1, 2]: d + 200 terbukti muat di u8
+        _ { return 0 }
+    }
+}
+
+fn main() {
+    print(name(0), " ", name(1), " ", name(2), " ", name(9))
+    for i := range 4 {
+        match i % 2 == 0 {
+            true { print(i, " even") }
+            false { print(i, " odd") }
+        }
+    }
+}
+// expect: 100 201 202 0
+// expect: 0 even
+// expect: 1 odd
+// expect: 2 even
+// expect: 3 odd

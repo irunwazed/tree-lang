@@ -1,0 +1,13 @@
+fn pick[T](a, b T) T { return a }
+fn bad[T]() T { var x T
+    return x }
+fn plus[T](a, b T) T { return a + b }
+type P struct { x i64 }
+fn main() {
+    _ = pick(1, true)
+    _ = bad()
+    _ = plus(P{1}, P{2})
+}
+// error: argument 1 of 'pick': expected bool, found i64
+// error: cannot infer type parameter 'T' of 'bad'
+// error: '+' requires numeric operands, found P

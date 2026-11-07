@@ -1,0 +1,19 @@
+package main
+
+import "gen/coll"
+
+type Item struct {
+    w i64
+}
+
+fn main() {
+    xs := [..]i64{5, 1, 4}
+    print(coll.Biggest(xs, 0), " ", coll.Count(xs))
+    items := [..]Item{Item{3}, Item{9}}
+    print(coll.Count(items), " ", coll.Pick(items, 1, Item{0}))
+    doubled := coll.Twice(xs) { x => x *| 2 }
+    print(doubled)
+}
+// expect: 5 3
+// expect: 2 Item { w: 9 }
+// expect: [10, 2, 8]

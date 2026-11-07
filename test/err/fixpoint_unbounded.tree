@@ -1,0 +1,10 @@
+// n tidak pernah sama dengan -5, jadi loop terus naik sampai overflow: harus ditolak.
+fn main() {
+    var n i32
+    for {
+        n++
+        if n == -5 { break }
+    }
+    print(n)
+}
+// error: possible overflow: 'n + 1'

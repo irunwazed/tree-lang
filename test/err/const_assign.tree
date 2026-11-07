@@ -1,0 +1,5 @@
+const K = 1
+fn main() {
+    K = 3
+}
+// error: cannot assign to constant 'K'

@@ -1,0 +1,21 @@
+type Counter struct {
+    n u32
+}
+
+fn main() {
+    var c Counter
+    grid := [..]i64{1, 2, 3}
+    grid.each() { a =>
+        grid.each() { b =>
+            if a < b && c.n < 1000 { c.n++ }   // block bersarang menangkap c lewat block luar
+        }
+    }
+    print(c.n)
+    var best i64 = -1
+    grid.each() {
+        if it > best { best = it }
+    }
+    print(best)
+}
+// expect: 3
+// expect: 3

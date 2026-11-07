@@ -1,0 +1,10 @@
+fn main() {
+    var n i64
+    var total i64
+    for n < 10 {
+        n++
+        total += n
+    }
+    print(total)
+}
+// error: possible overflow: 'total + n'

@@ -1,0 +1,8 @@
+fn grow(xs &[..]i64, f fn(i64)) {
+    for i := range 3 { f(i) }
+}
+fn main() {
+    var xs [..]i64
+    grow(&xs) { xs = [..]i64{} }
+}
+// error: the block modifies 'xs', which is also passed to 'grow'

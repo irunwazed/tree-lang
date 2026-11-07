@@ -1,0 +1,20 @@
+package main
+
+import (
+    "example.com/tools/text"
+    m "example.com/tools/text/mathx"
+    "example.com/tools/stats"
+)
+
+fn main() {
+    a := text.Name()
+    b := m.Name()
+    print(a, " ", b)
+    sh := text.Shout(3)
+    print(m.Square(9), " ", sh)
+    xs := [..]i64{4, 8, 15, 16, 23, 42}
+    print(stats.Mean(xs), " ", stats.Total(xs))
+}
+// expect: text mathx
+// expect: 81 SHOUT 9
+// expect: 18 108

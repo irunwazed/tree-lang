@@ -1,0 +1,7 @@
+fn sum(n u64) u64 {
+    var total u64
+    for i := range n { total += i }
+    return total
+}
+fn main() { print(sum(10)) }
+// error: possible overflow: 'total + i'

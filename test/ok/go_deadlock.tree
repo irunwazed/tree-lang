@@ -1,0 +1,8 @@
+// Semua goroutine menunggu selamanya: runtime mendeteksi dan berhenti dengan pesan jelas.
+fn main() {
+    ch := chan[i64](0)
+    print("waiting")
+    _ = <-ch
+}
+// expect: waiting
+// exit: 101

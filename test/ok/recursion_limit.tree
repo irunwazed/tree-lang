@@ -1,0 +1,15 @@
+// #max_depth(N): rekursi dibatasi; melampauinya = abort terkendali, bukan stack overflow.
+#max_depth(50)
+fn down(n i64) i64 {
+    if n <= 0 { return 0 }
+    r := down(n - 1)
+    if r > 1000000 { return 0 }
+    return r + 1
+}
+
+fn main() {
+    print(down(40))
+    print(down(100))
+}
+// expect: 40
+// exit: 101

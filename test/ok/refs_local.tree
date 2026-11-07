@@ -1,0 +1,25 @@
+// Referensi lokal 'r := &x': root diinferensi, tanpa anotasi lifetime.
+type P struct {
+    v [4]i64
+    n i32
+}
+
+fn main() {
+    var p P
+    r := &p.v[2]
+    r = 42
+    r = r +% 1               // rentang lewat referensi lokal tidak dilacak: pakai +% / +| atau cek
+    print(p.v, " ", r)
+    var xs [..]i64
+    for i := range 3 { xs.push(i) }
+    first := &xs[0]
+    xs.push(99)              // array hanya tumbuh: 'first' tetap valid
+    first = -5
+    print(xs)
+    q := &p
+    q.n = 7
+    print(p.n)
+}
+// expect: [0, 0, 43, 0] 43
+// expect: [-5, 1, 2, 99]
+// expect: 7

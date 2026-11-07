@@ -1,0 +1,13 @@
+package work
+
+type Job struct {
+    N i64
+}
+
+fn Worker(jobs Chan[Job], out Chan[i64]) {
+    for j := range jobs {
+        _ = out <- double(j.N)
+    }
+}
+
+fn double(x i64) i64 { return x *| 2 }

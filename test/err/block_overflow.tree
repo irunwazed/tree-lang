@@ -1,0 +1,7 @@
+// block bisa dipanggil berapa kali pun: akumulasi tanpa batas harus dibuktikan seperti di loop
+fn main() {
+    xs := [..]i64{1, 2}
+    var total i64
+    xs.each() { total += it }
+}
+// error: possible overflow: 'total + it'

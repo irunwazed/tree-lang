@@ -1,0 +1,7 @@
+fn f(x i64) u8 { return x as u8 }
+fn g(x i64) u8 { return x as! u8 }
+fn h(x u32) i32 { return x as i32 }
+fn main() { print(f(1), g(1), h(1)) }
+// error: cannot convert i64 to u8 with 'as'
+// error: cannot prove 'x' (range [-9223372036854775808, 9223372036854775807]) fits in u8
+// error: cannot convert u32 to i32 with 'as'

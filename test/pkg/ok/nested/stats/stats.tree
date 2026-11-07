@@ -1,0 +1,14 @@
+package stats
+
+import "example.com/tools/text/mathx"
+
+fn Total(xs []i64) i64 {
+    return fold(xs, 0) { acc, x => acc +| x }
+}
+
+fn Mean(xs []i64) i64 {
+    if len(xs) == 0 { return 0 }
+    return Total(xs) / len(xs)
+}
+
+fn unused_helper() i64 { return mathx.Square(2) }

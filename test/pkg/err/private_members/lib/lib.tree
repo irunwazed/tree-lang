@@ -1,0 +1,12 @@
+package lib
+
+type Key struct {
+    Id i64
+    secret i64
+}
+
+fn New() Key { return Key{1, 2} }
+
+fn (k Key) peek() i64 { return k.secret }
+
+fn (k Key) Get() i64 { return k.peek() }
