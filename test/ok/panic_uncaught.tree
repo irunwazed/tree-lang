@@ -1,0 +1,17 @@
+// panic yang tidak di-recover: defer tetap jalan, lalu program berhenti dengan pesan & exit 101
+fn work() {
+    defer print("work cleanup")
+    panic("disk on fire")
+}
+
+fn main() {
+    defer print("main cleanup")
+    print("start")
+    work()
+    print("not reached")
+}
+// expect: start
+// expect: work cleanup
+// expect: main cleanup
+// stderr: panic: disk on fire
+// exit: 101

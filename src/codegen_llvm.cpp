@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cmath>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <set>
 #include <tuple>
@@ -124,7 +125,8 @@ public:
         head << "declare void @tl_print_nl()\n";
         head << "declare void @tl_abort(ptr, i64) noreturn\n";
         head << "declare void @tl_internal_fail(i32) noreturn\n";
-        head << "declare void @tl_dyn_reserve(ptr, i64)\n";
+        // mode panic: gagal alokasi → 0 + panic (bisa di-recover); selain itu runtime abort
+        head << (sema_.panic_mode ? "declare i32 @tl_dyn_reserve(ptr, i64)\n" : "declare void @tl_dyn_reserve(ptr, i64)\n");
         head << "declare void @tl_dyn_free(ptr)\n";
         head << "declare void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)\n";
         head << "declare void @tl_bytes_put(ptr, ptr, i64)\n";
@@ -166,6 +168,7 @@ public:
         // konstanta untuk runtime: ukuran state per goroutine & stack goroutine main
         globals_ += "@tl_depth_slots = constant i64 " + std::to_string(depth_id_) + "\n";
         globals_ += "@tl_from_bytes = constant i64 " + std::to_string(from_bytes_ + 8) + "\n";
+        globals_ += std::string("@tl_panic_mode = constant i32 ") + (sema_.panic_mode ? "1" : "0") + "\n";
         uint64_t main_stack = sema_.main_fn ? goroutine_stack(*sema_.main_fn) : (1u << 20);
         globals_ += "@tl_main_stack = constant i64 " + std::to_string(main_stack) + "\n";
         std::string intr;
@@ -264,6 +267,11 @@ private:
         terminated_ = false;
         cur_label_ = "entry";
         captures_.clear();
+        dfn_ = false;
+        exit_label_.clear();
+        ret_slot_.clear();
+        in_defer_code_ = false;
+        unw_cached_ = false;
     }
 
     // Block menjadi fungsi tersendiri: define RT @tl.b.N(ptr %env, params...).
@@ -327,12 +335,74 @@ private:
 
     // Setelah panggilan yang bisa melompat: bila ada 'return ... from' yang sedang berjalan,
     // tangkap jika targetnya fungsi ini; jika tidak, bebaskan milik frame ini dan teruskan ke atas.
+    // pointer flag unwind goroutine ini (mode panic: diambil sekali per fungsi)
+    std::string unw_ptr() {
+        if (!sema_.panic_mode) return emit("call ptr @tl_unwind_ptr()");
+        if (!unw_cached_) {
+            allocas_ += "  %unw = call ptr @tl_unwind_ptr()\n";
+            unw_cached_ = true;
+        }
+        return "%unw";
+    }
+
+    void need_panic_decls() {
+        need_intrinsic("declare void @tl_panic_set(ptr, i64)");
+        need_intrinsic("declare void @tl_panic_fatal(ptr, i64) noreturn");
+        need_intrinsic("declare void @tl_recover(ptr)");
+    }
+
+    // Mode panic: bila flag sudah terpasang (panic dari runtime), bersihkan lalu buka frame ini.
+    void panic_guard(const std::function<void()>& cleanup = {}) {
+        if (!sema_.panic_mode) return;
+        std::string u = emit("load i32, ptr " + unw_ptr());
+        std::string lu = label("panicking"), lc = label("cont");
+        terminate("br i1 " + emit("icmp ne i32 " + u + ", 0") + ", label %" + lu + ", label %" + lc);
+        start_block(lu);
+        if (cleanup) cleanup();
+        unwind_here(u);
+        start_block(lc);
+    }
+
+    // Flag unwind != 0 (u): tinggalkan defer yang sedang berjalan / fungsi ini.
+    void unwind_here(const std::string& u) {
+        if (in_defer_code_) {
+            free_scopes(defer_body_scope_, {});
+            terminate("br label %" + defer_after_);
+            return;
+        }
+        if (dfn_) {
+            free_scopes(1, {});  // scope terluar dibebaskan di blok keluar, setelah defer
+            terminate("br label %" + exit_label_);
+            return;
+        }
+        if (fn_ && fn_->from_id) {
+            std::string up = unw_ptr();
+            std::string lcatch = label("catch"), lprop = label("propagate");
+            terminate("br i1 " + emit("icmp eq i32 " + u + ", " + std::to_string(fn_->from_id)) + ", label %" + lcatch +
+                      ", label %" + lprop);
+            start_block(lcatch);
+            line("store i32 0, ptr " + up);
+            std::string v;
+            if (cur_ret_ != Types::void_()) v = emit("load " + llvm_type(cur_ret_) + ", ptr " + from_slot(*fn_));
+            free_scopes(0, {});
+            do_ret(cur_ret_ == Types::void_() ? "ret void" : "ret " + llvm_type(cur_ret_) + " " + v);
+            start_block(lprop);
+        }
+        free_scopes(0, {});
+        do_ret(ret_zero());
+    }
+
     void unwind_check() {
-        std::string up = emit("call ptr @tl_unwind_ptr()");
+        std::string up = unw_ptr();
         std::string u = emit("load i32, ptr " + up);
         std::string lu = label("unwind"), lc = label("cont");
         terminate("br i1 " + emit("icmp ne i32 " + u + ", 0") + ", label %" + lu + ", label %" + lc);
         start_block(lu);
+        if (in_defer_code_ || dfn_) {
+            unwind_here(u);
+            start_block(lc);
+            return;
+        }
         if (fn_ && fn_->from_id) {
             std::string lcatch = label("catch"), lprop = label("propagate");
             terminate("br i1 " + emit("icmp eq i32 " + u + ", " + std::to_string(fn_->from_id)) + ", label %" + lcatch +
@@ -385,11 +455,16 @@ private:
             args += (i ? ", " : "") + x;
         }
         std::string call = "call " + c_type(fn->ret) + " " + fn_symbol(fn) + "(" + args + ")";
+        // runtime yang mengisi [..]u8 (file, stdin, argumen, env) bisa kehabisan memori → panic
+        const std::string& cn = fn->c_name.empty() ? fn->name : fn->c_name;
+        bool allocs = cn == "tl_os_read_file" || cn == "tl_os_read_line" || cn == "tl_os_arg" || cn == "tl_os_env";
         if (fn->ret == Types::void_()) {
             line(call);
+            if (allocs) panic_guard();
             return {"", fn->ret};
         }
         std::string r = emit(call);
+        if (allocs) panic_guard();
         if (fn->ret == Types::bool_()) r = emit("icmp ne i32 " + r + ", 0");
         return {r, fn->ret};
     }
@@ -430,11 +505,22 @@ private:
             terminate("br i1 " + emit("icmp sge i64 " + d + ", " + std::to_string(max_depth)) + ", label %" + lbad +
                       ", label %" + lok);
             start_block(lbad);
-            std::string msg = "recursion in '" + fn.name + "' exceeded #max_depth(" + std::to_string(max_depth) + ")";
-            line("call void @tl_abort(ptr " + str_const(msg) + ", i64 " + std::to_string(msg.size()) + ")");
-            terminate("unreachable");
+            std::string msg = "recursion in '" + display_text(fn.name) + "' exceeded #max_depth(" + std::to_string(max_depth) + ")";
+            if (sema_.panic_mode) {
+                // panic yang bisa di-recover; belum ada yang dimiliki/di-arm, kedalaman belum dinaikkan
+                need_panic_decls();
+                line("call void @tl_panic_set(ptr " + str_const(msg) + ", i64 " + std::to_string(msg.size()) + ")");
+                terminate(ret_zero());
+            } else {
+                line("call void @tl_abort(ptr " + str_const(msg) + ", i64 " + std::to_string(msg.size()) + ")");
+                terminate("unreachable");
+            }
             start_block(lok);
             line("store i64 " + emit("add i64 " + d + ", 1") + ", ptr " + depth_global_);
+        }
+        if (!fn.defers.empty()) {
+            emit_defer_fn_body(fn);
+            return sig + " {\nentry:\n" + allocas_ + body_ + "}\n";
         }
         emit_block(*fn.body);
         if (!terminated_) {
@@ -442,6 +528,77 @@ private:
             else proven_unreachable();  // sema membuktikan semua jalur sudah return
         }
         return sig + " {\nentry:\n" + allocas_ + body_ + "}\n";
+    }
+
+    std::string armed_slot(int i) { return "%darm" + std::to_string(i); }
+
+    // Fungsi dengan defer: semua jalan keluar (return, panic, return-from yang melintas) menuju
+    // 'defer.exit', yang menjalankan defer LIFO lalu memutuskan: tangkap / teruskan unwind / return.
+    void emit_defer_fn_body(const FnDecl& fn) {
+        dfn_ = true;
+        exit_label_ = label("defer.exit");
+        if (fn.ret != Types::void_()) {
+            ret_slot_ = temp_slot(fn.ret);
+            allocas_ += "  store " + llvm_type(fn.ret) + " zeroinitializer, ptr " + ret_slot_ + "\n";
+        }
+        for (size_t i = 0; i < fn.defers.size(); i++)
+            allocas_ += "  " + armed_slot((int)i) + " = alloca i1\n  store i1 false, ptr " + armed_slot((int)i) + "\n";
+        allocas_ += "  %dsaved = alloca i32\n";
+        dyn_scopes_.emplace_back();  // scope terluar: dibebaskan di blok keluar
+        for (auto& st : fn.body->stmts) emit_stmt(*st);
+        if (!terminated_) {
+            if (fn.ret == Types::void_()) terminate("br label %" + exit_label_);
+            else proven_unreachable();
+        }
+        start_block(exit_label_);
+        std::string up = unw_ptr();
+        // defer berjalan dengan flag bersih (panggilan di dalamnya tidak boleh mengira sedang unwind)
+        line("store i32 " + emit("load i32, ptr " + up) + ", ptr %dsaved");
+        line("store i32 0, ptr " + up);
+        for (size_t k = fn.defers.size(); k-- > 0;) {
+            const Stmt& d = *fn.defers[k];
+            std::string lrun = label("defer.run"), lafter = label("defer.after");
+            terminate("br i1 " + emit("load i1, ptr " + armed_slot((int)k)) + ", label %" + lrun + ", label %" + lafter);
+            start_block(lrun);
+            in_defer_code_ = true;
+            defer_after_ = lafter;
+            defer_body_scope_ = dyn_scopes_.size();
+            if (d.e1) emit_expr(*d.e1);
+            else emit_block(*d.body);
+            in_defer_code_ = false;
+            if (!terminated_) terminate("br label %" + lafter);
+            start_block(lafter);
+            // panic baru di dalam defer menggantikan yang lama (seperti Go); defer sisanya tetap jalan
+            std::string c = emit("load i32, ptr " + up);
+            std::string old = emit("load i32, ptr %dsaved");
+            std::string nz = emit("icmp ne i32 " + c + ", 0");
+            line("store i32 " + emit("select i1 " + nz + ", i32 " + c + ", i32 " + old) + ", ptr %dsaved");
+            line("store i32 0, ptr " + up);
+        }
+        std::string u = emit("load i32, ptr %dsaved");
+        line("store i32 " + u + ", ptr " + up);
+        if (fn.from_id) {
+            std::string lcatch = label("catch"), lnext = label("nocatch");
+            terminate("br i1 " + emit("icmp eq i32 " + u + ", " + std::to_string(fn.from_id)) + ", label %" + lcatch +
+                      ", label %" + lnext);
+            start_block(lcatch);
+            line("store i32 0, ptr " + up);
+            std::string v;
+            if (cur_ret_ != Types::void_()) v = emit("load " + llvm_type(cur_ret_) + ", ptr " + from_slot(fn));
+            free_scopes(0, {});
+            do_ret(cur_ret_ == Types::void_() ? "ret void" : "ret " + llvm_type(cur_ret_) + " " + v);
+            start_block(lnext);
+        }
+        std::string lprop = label("propagate"), lret = label("return");
+        terminate("br i1 " + emit("icmp ne i32 " + u + ", 0") + ", label %" + lprop + ", label %" + lret);
+        start_block(lprop);
+        free_scopes(0, {});
+        do_ret(ret_zero());
+        start_block(lret);
+        free_scopes(0, {});
+        if (cur_ret_ == Types::void_()) do_ret("ret void");
+        else do_ret("ret " + llvm_type(cur_ret_) + " " + emit("load " + llvm_type(cur_ret_) + ", ptr " + ret_slot_));
+        dyn_scopes_.pop_back();
     }
 
     // ---------------- statement ----------------
@@ -462,7 +619,11 @@ private:
     }
 
     void own_dyn(const VarInfo* v) {
-        if (!v->is_ref && contains_dyn(v->type)) dyn_scopes_.back().push_back(v);
+        if (!v->is_ref && contains_dyn(v->type)) {
+            dyn_scopes_.back().push_back(v);
+            if (dfn_ && dyn_scopes_.size() == 1 && !in_defer_code_)
+                allocas_ += "  store " + llvm_type(v->type) + " zeroinitializer, ptr " + var_slot(v) + "\n";
+        }
     }
 
     // Panggil fn (tl_region_own/disown) untuk setiap region di dalam nilai bertipe t di alamat addr.
@@ -592,6 +753,17 @@ private:
             }
             case StmtKind::Match: emit_match(s); return;
             case StmtKind::Select: emit_select(s); return;
+            case StmtKind::Defer: {
+                if (s.defer_id < 0) return;
+                // argumen dievaluasi sekarang; kode defer ditulis di blok keluar
+                for (size_t i = 0; i < s.defer_args.size(); i++) {
+                    Val v = emit_expr(*s.defer_args[i]);
+                    alloca_var(s.defer_slots[i]);
+                    line("store " + llvm_type(v.type) + " " + v.op + ", ptr " + var_slot(s.defer_slots[i]));
+                }
+                line("store i1 true, ptr " + armed_slot(s.defer_id));
+                return;
+            }
             case StmtKind::If: {
                 if (s.if_some) {
                     emit_if_some(s);
@@ -700,6 +872,28 @@ private:
                 std::vector<const VarInfo*> moved;
                 for (auto& e : s.exprs)
                     if (e->kind == ExprKind::Name && e->var && contains_dyn(e->type)) moved.push_back(e->var);
+                if (dfn_) {
+                    // simpan hasil, lalu lewat blok keluar (defer jalan dulu)
+                    if (ret != Types::void_()) {
+                        std::string agg;
+                        if (ret->kind == TypeKind::Tuple && s.exprs.size() > 1) {
+                            agg = "poison";
+                            for (size_t i = 0; i < s.exprs.size(); i++) {
+                                Val v = emit_expr(*s.exprs[i]);
+                                agg = emit("insertvalue " + llvm_type(ret) + " " + agg + ", " + llvm_type(v.type) +
+                                           " " + v.op + ", " + std::to_string(i));
+                            }
+                        } else {
+                            agg = emit_expr(*s.exprs[0]).op;
+                        }
+                        line("store " + llvm_type(ret) + " " + agg + ", ptr " + ret_slot_);
+                    }
+                    free_scopes(1, moved);
+                    for (const VarInfo* m : moved)  // dipindah ke hasil: slot dinolkan (free di keluar = no-op)
+                        line("store " + llvm_type(m->type) + " zeroinitializer, ptr " + var_slot(m));
+                    terminate("br label %" + exit_label_);
+                    return;
+                }
                 if (ret == Types::void_()) {
                     free_scopes(0, {});
                     do_ret("ret void");
@@ -854,6 +1048,41 @@ private:
     }
 
     void emit_if_some(const Stmt& s) {
+        if (s.e1->kind == ExprKind::Call && s.e1->builtin == Builtin::Recover) {
+            // if some msg := recover(): pesan panic pindah ke [..]u8 milik msg, panic berhenti
+            need_panic_decls();
+            Type* el = Types::dyn(Types::int_(8, false));
+            const VarInfo* v = s.vars.empty() ? nullptr : s.vars[0];
+            std::string slot;
+            if (v) {
+                alloca_var(v);
+                slot = var_slot(v);
+            } else {
+                slot = temp_slot(el);
+            }
+            std::string lthen = label("recover"), lelse = label("norecover"), lend = label("endrecover");
+            terminate("br i1 " + emit("icmp eq i32 " + emit("load i32, ptr %dsaved") + ", -1") + ", label %" + lthen +
+                      ", label %" + (s.else_body ? lelse : lend));
+            start_block(lthen);
+            line("store i32 0, ptr %dsaved");
+            line("store { ptr, i64, i64 } zeroinitializer, ptr " + slot);
+            line("call void @tl_recover(ptr " + slot + ")");
+            panic_guard([&] { line("call void @tl_dyn_free(ptr " + slot + ")"); });
+            dyn_scopes_.emplace_back();
+            if (v) own_dyn(v);
+            else line("call void @tl_dyn_free(ptr " + slot + ")");
+            emit_block(*s.body);
+            if (!terminated_) free_scopes(dyn_scopes_.size() - 1, {});
+            dyn_scopes_.pop_back();
+            if (!terminated_) terminate("br label %" + lend);
+            if (s.else_body) {
+                start_block(lelse);
+                emit_block(*s.else_body);
+                if (!terminated_) terminate("br label %" + lend);
+            }
+            start_block(lend);
+            return;
+        }
         if (s.e1->kind == ExprKind::ChanRecv) {
             // if some x := <-ch : terima langsung ke variabel x
             Type* el = s.e1->lhs->type->elem;
@@ -977,7 +1206,13 @@ private:
             }
             line("store " + llvm_type(f.ret) + " " + agg + ", ptr " + from_slot(f));
         }
-        line("store i32 " + std::to_string(f.from_id) + ", ptr " + emit("call ptr @tl_unwind_ptr()"));
+        line("store i32 " + std::to_string(f.from_id) + ", ptr " + unw_ptr());
+        if (dfn_) {
+            free_scopes(1, moved);
+            for (const VarInfo* m : moved) line("store " + llvm_type(m->type) + " zeroinitializer, ptr " + var_slot(m));
+            terminate("br label %" + exit_label_);
+            return;
+        }
         free_scopes(0, moved);
         do_ret(ret_zero());
     }
@@ -1072,11 +1307,26 @@ private:
         std::string slot = temp_slot(dt);
         line("store " + llvm_type(dt) + " zeroinitializer, ptr " + slot);
         std::string bytes = emit("mul i64 " + n + ", " + size_of(dt->elem));
-        line("call void @tl_dyn_reserve(ptr " + slot + ", i64 " + bytes + ")");
+        reserve(slot, bytes, true);
         std::string pl = emit("getelementptr { ptr, i64, i64 }, ptr " + slot + ", i32 0, i32 1");
         line("store i64 " + n + ", ptr " + pl);
         std::string pd = emit("getelementptr { ptr, i64, i64 }, ptr " + slot + ", i32 0, i32 0");
         return {slot, emit("load ptr, ptr " + pd)};
+    }
+
+    // tl_dyn_reserve; mode panic: gagal → panic (region baru 'fresh' dilepas dulu), array lama tak berubah
+    void reserve(const std::string& slot, const std::string& bytes, bool fresh) {
+        if (!sema_.panic_mode) {
+            line("call void @tl_dyn_reserve(ptr " + slot + ", i64 " + bytes + ")");
+            return;
+        }
+        std::string ok = emit("call i32 @tl_dyn_reserve(ptr " + slot + ", i64 " + bytes + ")");
+        std::string lf = label("oom"), lk = label("reserved");
+        terminate("br i1 " + emit("icmp eq i32 " + ok + ", 0") + ", label %" + lf + ", label %" + lk);
+        start_block(lf);
+        if (fresh) line("call void @tl_dyn_free(ptr " + slot + ")");
+        unwind_here("-1");
+        start_block(lk);
     }
 
     void memmove(const std::string& dst, const std::string& src, const std::string& bytes) {
@@ -1096,7 +1346,7 @@ private:
         std::string lg = label("grow"), lok = label("grown");
         terminate("br i1 " + grow + ", label %" + lg + ", label %" + lok);
         start_block(lg);
-        line("call void @tl_dyn_reserve(ptr " + slot + ", i64 " + need + ")");
+        reserve(slot, need, false);
         terminate("br label %" + lok);
         start_block(lok);
         std::string pd = emit("getelementptr { ptr, i64, i64 }, ptr " + slot + ", i32 0, i32 0");
@@ -2198,6 +2448,7 @@ private:
                 else print_val(it.v);
             }
             line("call void @tl_capture_end()");
+            panic_guard([&] { line("call void @tl_dyn_free(ptr " + slot + ")"); });  // OOM saat menyusun
             return {emit("load " + llvm_type(e.type) + ", ptr " + slot), e.type};
         }
         if (e.builtin == Builtin::Print) {
@@ -2234,6 +2485,42 @@ private:
             line("call void @tl_print_unlock()");
             return {"", Types::void_()};
         }
+        if (e.builtin == Builtin::Panic) {
+            need_panic_decls();
+            const Expr& m = *e.args[0];
+            std::string data, len;
+            if (m.kind == ExprKind::StrLit) {
+                data = str_const(m.str);
+                len = std::to_string(m.str.size());
+            } else {
+                std::tie(data, len) = emit_view(m);
+            }
+            if (!sema_.panic_mode) {
+                line("call void @tl_panic_fatal(ptr " + data + ", i64 " + len + ")");
+                terminate("unreachable");
+                return {"", Types::void_()};
+            }
+            line("call void @tl_panic_set(ptr " + data + ", i64 " + len + ")");
+            unwind_here("-1");
+            return {"", Types::void_()};
+        }
+        if (e.builtin == Builtin::Recover) {
+            // statement 'recover()': hentikan panic (bila ada), buang pesannya
+            need_panic_decls();
+            std::string lr = label("recover"), le = label("recovered");
+            terminate("br i1 " + emit("icmp eq i32 " + emit("load i32, ptr %dsaved") + ", -1") + ", label %" + lr +
+                      ", label %" + le);
+            start_block(lr);
+            line("store i32 0, ptr %dsaved");
+            std::string tmp = temp_slot(Types::dyn(Types::int_(8, false)));
+            line("store { ptr, i64, i64 } zeroinitializer, ptr " + tmp);
+            line("call void @tl_recover(ptr " + tmp + ")");
+            line("call void @tl_dyn_free(ptr " + tmp + ")");
+            panic_guard();
+            terminate("br label %" + le);
+            start_block(le);
+            return {"", Types::void_()};
+        }
         if (e.builtin == Builtin::Abort) {
             std::string msg = e.args.empty() ? "abort" : e.args[0]->str;
             line("call void @tl_abort(ptr " + str_const(msg) + ", i64 " + std::to_string(msg.size()) + ")");
@@ -2257,7 +2544,11 @@ private:
             case Builtin::PushLink:
             case Builtin::At:
             case Builtin::Put: return emit_link(e);
-            case Builtin::ToBytes: return emit_to_bytes(e);
+            case Builtin::ToBytes: {
+                Val v = emit_to_bytes(e);
+                if (sema_.panic_mode) panic_guard([&] { free_dyn_value(v); });
+                return v;
+            }
             case Builtin::FromBytes: return emit_from_bytes(e);
             default: break;
         }
@@ -2499,6 +2790,13 @@ private:
     std::map<const VarInfo*, int> captures_;
     bool terminated_ = false;
     std::string cur_label_ = "entry";
+    // defer: fungsi dengan defer keluar lewat satu blok 'defer.exit'
+    bool dfn_ = false;
+    std::string exit_label_, ret_slot_;
+    bool in_defer_code_ = false;      // sedang menulis kode sebuah defer (di blok keluar)
+    std::string defer_after_;         // label setelah defer yang sedang ditulis
+    size_t defer_body_scope_ = 0;
+    bool unw_cached_ = false;
 };
 
 }  // namespace

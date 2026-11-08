@@ -360,6 +360,10 @@ public:
                             f.type = Types::error();
                         }
         collect_fns();
+        // defer/recover di mana pun → panic membuka frame (bisa di-recover); selain itu panic = fatal
+        for (auto& fn : prog_.fns)
+            if (fn->body && !in_prelude(fn->loc) && pm_block(*fn->body)) panic_mode_ = true;
+        res.panic_mode = panic_mode_;
         for (auto& fn : prog_.fns) check_fn(*fn);
         while (!pending_.empty()) {
             FnDecl* f = pending_.back();
@@ -806,6 +810,193 @@ private:
 
     bool in_prelude(Loc l) const { return l.file && l.file->path == "<prelude>"; }
 
+    // ---------------- defer / panic / recover ----------------
+    bool pm_expr(const Expr& e) {
+        if (e.kind == ExprKind::Call && !e.method_call && e.str == "recover" && !fns_.count("recover")) return true;
+        if (e.kind == ExprKind::BlockLit && e.block && pm_block(*e.block)) return true;
+        for (const Expr* c : {e.lhs.get(), e.rhs.get(), e.end.get()})
+            if (c && pm_expr(*c)) return true;
+        for (auto& a : e.args)
+            if (a && pm_expr(*a)) return true;
+        return false;
+    }
+    bool pm_block(const Block& b) {
+        for (auto& st : b.stmts) {
+            const Stmt& x = *st;
+            if (x.kind == StmtKind::Defer) return true;
+            for (const Expr* c : {x.e1.get(), x.e2.get(), x.e3.get()})
+                if (c && pm_expr(*c)) return true;
+            for (auto& e : x.exprs)
+                if (pm_expr(*e)) return true;
+            for (const Block* c : {x.body.get(), x.else_body.get()})
+                if (c && pm_block(*c)) return true;
+            for (auto& a : x.arms)
+                if (a.body && pm_block(*a.body)) return true;
+            for (auto& a : x.sel)
+                if ((a.op && pm_expr(*a.op)) || (a.body && pm_block(*a.body))) return true;
+        }
+        return false;
+    }
+
+    // nilai nol tipe ini tidak bisa dipakai (handle channel/task kosong)
+    static bool has_handle(const Type* t) {
+        switch (t->kind) {
+            case TypeKind::Chan:
+            case TypeKind::Thread: return true;
+            case TypeKind::Array:
+            case TypeKind::Optional:
+            case TypeKind::Dyn: return has_handle(t->elem);
+            case TypeKind::Tuple:
+                for (auto* e : t->elems)
+                    if (has_handle(e)) return true;
+                return false;
+            case TypeKind::Struct:
+                for (auto& f : t->sd->fields)
+                    if (f.type && has_handle(f.type)) return true;
+                return false;
+            default: return false;
+        }
+    }
+
+    bool in_defer_body() const { return in_defer_ && block_ctx_.size() == defer_block_base_; }
+
+    // defer f(args)  /  defer { ... }: dijalankan LIFO saat fungsi keluar (return, panic, return-from)
+    void check_defer(Stmt& s) {
+        bool ok = true;
+        if (!fn_ || !block_ctx_.empty()) {
+            diag_.error(s.loc, in_defer_ ? "'defer' cannot be nested inside another defer"
+                                         : "'defer' is not allowed inside a block argument",
+                        "defer belongs to a function; put it in the function body");
+            ok = false;
+        } else if (in_defer_) {
+            diag_.error(s.loc, "'defer' cannot be nested inside another defer");
+            ok = false;
+        } else if (!loops_.empty()) {
+            diag_.error(s.loc, "'defer' inside a loop would pile up until the function returns",
+                        "move the loop body into its own function and defer there");
+            ok = false;
+        }
+        if (s.e1) {
+            Expr& c = *s.e1;
+            Type* t = check_expr(c, nullptr);
+            if (!t->is_error() && t != Types::void_() && contains_dyn(t))
+                diag_.error(c.loc, "a deferred call cannot return an owned value (it would be lost)");
+            if (c.kind == ExprKind::Call && (c.builtin == Builtin::Panic || c.builtin == Builtin::Recover ||
+                                            c.builtin == Builtin::Abort)) {
+                diag_.error(c.loc, "'defer " + c.str + "(...)' is not supported", "write 'defer { ... }'");
+                return;
+            }
+            // argumen dievaluasi SEKARANG (seperti Go): disimpan di slot tersembunyi
+            for (size_t i = 0; i < c.args.size(); i++) {
+                Expr& a = *c.args[i];
+                if (!a.type || a.type->is_error()) continue;
+                switch (a.kind) {
+                    case ExprKind::IntLit:
+                    case ExprKind::FloatLit:
+                    case ExprKind::BoolLit:
+                    case ExprKind::StrLit:
+                    case ExprKind::NoneLit: continue;  // konstanta: sama saja kapan dievaluasi
+                    default: break;
+                }
+                if (a.kind == ExprKind::BlockLit) {
+                    diag_.error(a.loc, "a deferred call cannot take a block argument", "write 'defer { ... }'");
+                    continue;
+                }
+                if (a.borrow || (a.kind == ExprKind::Unary && a.op == Tok::Amp)) {
+                    // referensi: variabel harus masih hidup saat fungsi keluar
+                    VarInfo* r = syntactic_root(a);
+                    if (r && !outer_var(r))
+                        diag_.error(a.loc, "'" + r->name + "' lives in an inner block and is gone when the deferred call runs",
+                                    "declare it at the top of the function, or use 'defer { ... }'");
+                    continue;
+                }
+                Type* at = a.wrap_opt ? Types::optional(a.type) : a.type;
+                if (contains_dyn(at) || at->kind == TypeKind::Slice || at->kind == TypeKind::Ref) {
+                    diag_.error(a.loc, "a deferred call cannot capture " + type_name(at) + " by value",
+                                "use 'defer { ... }', which reads the variable when it runs");
+                    continue;
+                }
+                VarInfo* v = new_var("$defer" + std::to_string(next_var_id_), a.loc, at, false);
+                auto nm = std::make_unique<Expr>(ExprKind::Name, a.loc);
+                nm->str = v->name;
+                nm->var = v;
+                nm->type = at;
+                s.defer_slots.push_back(v);
+                s.defer_args.push_back(std::move(c.args[i]));
+                c.args[i] = std::move(nm);
+            }
+        } else if (s.body) {
+            Env saved = env_;
+            // dijalankan di titik keluar yang tidak diketahui: rentang & fakta dilupakan
+            env_.r.clear();
+            env_.lt.clear();
+            env_.dead = false;
+            int first_id = next_var_id_;
+            bool prev = in_defer_;
+            in_defer_ = true;
+            defer_scope_base_ = scopes_.size();
+            defer_block_base_ = block_ctx_.size();
+            check_block(*s.body);
+            in_defer_ = prev;
+            for (VarInfo* v : env_.moved)
+                if (!saved.moved.count(v) && v->id < first_id)
+                    diag_.error(s.loc, "'" + v->name + "' cannot be moved inside defer");
+            std::set<VarInfo*> mods;
+            collect_assigned(*s.body, mods);
+            for (VarInfo* v : mods)
+                if (v->id < first_id && v->type && contains_dyn(v->type))
+                    diag_.error(s.loc, "defer cannot change '" + v->name + "': it owns memory that is freed after the defers run",
+                                "a defer may read owning variables, and change plain values");
+            env_ = saved;
+        }
+        if (ok && fn_) {
+            s.defer_id = (int)fn_->defers.size();
+            fn_->defers.push_back(&s);
+        }
+    }
+
+    // parameter atau variabel di scope terluar fungsi (hidup sampai fungsi keluar)
+    bool outer_var(VarInfo* v) {
+        for (size_t i = 0; i < scopes_.size() && i < 2; i++)
+            for (auto& [n, x] : scopes_[i])
+                if (x == v) return true;
+        return v->is_param;
+    }
+
+    Type* check_panic(Expr& e) {
+        e.builtin = Builtin::Panic;
+        if (!in_prelude(e.loc)) panics_[&e] = {e.loc, loc_text(e.loc) + ": panic(...)"};
+        if (e.args.size() != 1) {
+            diag_.error(e.loc, "'panic' takes one message");
+            for (auto& a : e.args) check_expr(*a, nullptr);
+            return Types::void_();
+        }
+        Type* t = check_expr(*e.args[0], nullptr);
+        bool ok = t == Types::str_lit() || t->is_error() ||
+                  ((t->kind == TypeKind::Slice || t->kind == TypeKind::Dyn || t->kind == TypeKind::Array) &&
+                   t->elem == Types::int_(8, false));
+        if (!ok)
+            diag_.error(e.args[0]->loc, "'panic' takes a string message, found " + type_name(t),
+                        "e.g. panic(\"bad input\") or 'msg := str(\"bad id \", id)' then panic(msg)");
+        return Types::void_();
+    }
+
+    Type* check_recover(Expr& e) {
+        e.builtin = Builtin::Recover;
+        if (!e.args.empty()) diag_.error(e.loc, "'recover' takes no arguments");
+        if (!in_defer_body()) {
+            diag_.error(e.loc, "'recover' only works directly inside 'defer { ... }'",
+                        "write 'defer { if some msg := recover() { ... } }'");
+        } else if (fn_ && fn_->ret && has_handle(fn_->ret)) {
+            diag_.error(e.loc, "a function that recovers returns its zero value, but " + type_name(fn_->ret) +
+                                   " has no usable zero value",
+                        "return a struct or optional instead of a channel/task handle");
+        }
+        // 'if some msg := recover()' → [..]u8 milik msg; sebagai statement: panic dihentikan, pesan dibuang
+        if (owned_recv_ok_ == &e) return Types::optional(Types::dyn(Types::int_(8, false)));
+        return Types::void_();
+    }
+
     // ---------------- package ----------------
     // Nama internal package non-main: "<importpath>.Nama". Nama tanpa kualifikasi dicari di package
     // file pemakai, lalu di prelude (package main juga melihat namanya sendiri yang tanpa prefix).
@@ -1009,6 +1200,8 @@ private:
         } pop_t{tparams_};
         fn_ = &fn;
         env_ = Env{};
+        in_defer_ = false;
+        fn.defers.clear();
         loops_.clear();
         scopes_.clear();
         scopes_.emplace_back();
@@ -1059,6 +1252,9 @@ private:
         for (size_t i = scopes_.size(); i-- > 0;) {
             auto f = scopes_[i].find(name);
             if (f != scopes_[i].end()) {
+                if (in_defer_ && i >= 2 && i < defer_scope_base_ && name[0] != '$')
+                    diag_.error(use, "'" + name + "' lives in an inner block and is gone when the defer runs",
+                                "a defer can use parameters and variables declared at the top of the function");
                 // berada di luar block yang sedang diperiksa → ditangkap (lewat alamatnya)
                 for (auto& bc : block_ctx_)
                     if (i < bc.base) bc.captures.insert(f->second);
@@ -1221,7 +1417,9 @@ private:
             case StmtKind::Return:
             case StmtKind::Break:
             case StmtKind::Continue: return true;
-            case StmtKind::ExprStmt: return s.e1->kind == ExprKind::Call && s.e1->builtin == Builtin::Abort;
+            case StmtKind::ExprStmt:
+                return s.e1->kind == ExprKind::Call &&
+                       (s.e1->builtin == Builtin::Abort || s.e1->builtin == Builtin::Panic);
             default: break;
         }
         if (s.body)
@@ -1619,7 +1817,8 @@ private:
             case StmtKind::Assign: check_assign(s); break;
             case StmtKind::ExprStmt: {
                 Type* t = check_expr(*s.e1, nullptr);
-                if (s.e1->kind == ExprKind::Call && s.e1->builtin == Builtin::Abort) env_.dead = true;
+                if (s.e1->kind == ExprKind::Call && (s.e1->builtin == Builtin::Abort || s.e1->builtin == Builtin::Panic))
+                    env_.dead = true;
                 if (t != Types::void_() && !t->is_error())
                     diag_.error(s.e1->loc, "result of type " + type_name(t) + " is not used",
                                 "use the value, or discard it explicitly with '_ = " + expr_str(*s.e1) + "'");
@@ -1632,6 +1831,7 @@ private:
             }
             case StmtKind::Match: check_match(s); break;
             case StmtKind::Select: check_select(s); break;
+            case StmtKind::Defer: check_defer(s); break;
             case StmtKind::If: {
                 if (s.if_some) {
                     check_if_some(s);
@@ -1662,7 +1862,15 @@ private:
                 }
                 env_.dead = true;
                 break;
-            case StmtKind::Return: check_return(s); break;
+            case StmtKind::Return:
+                if (in_defer_body()) {
+                    diag_.error(s.loc, "'return' is not allowed inside defer",
+                                "a defer runs while the function is already leaving");
+                    env_.dead = true;
+                    break;
+                }
+                check_return(s);
+                break;
             case StmtKind::Block: check_block(*s.body); break;
         }
     }
@@ -1699,6 +1907,8 @@ private:
     void check_if_some(Stmt& s) {
         Expr* saved_recv = owned_recv_ok_;
         if (s.e1->kind == ExprKind::ChanRecv) owned_recv_ok_ = s.e1.get();  // if some x := <-ch
+        if (s.e1->kind == ExprKind::Call && s.e1->str == "recover" && !s.e1->method_call)
+            owned_recv_ok_ = s.e1.get();  // if some msg := recover()
         Type* t = check_expr(*s.e1, nullptr);
         owned_recv_ok_ = saved_recv;
         Type* el = Types::error();
@@ -3306,6 +3516,8 @@ private:
             }
             return Types::dyn(Types::int_(8, false));
         }
+        if (!e.method_call && e.str == "panic" && !named(fns_, "panic", e.loc)) return check_panic(e);
+        if (!e.method_call && e.str == "recover" && !named(fns_, "recover", e.loc)) return check_recover(e);
         if (!e.method_call && (e.str == "print" || e.str == "abort")) {
             e.builtin = e.str == "print" ? Builtin::Print : Builtin::Abort;
             if (e.builtin == Builtin::Abort && !in_prelude(e.loc)) panics_[&e] = {e.loc, loc_text(e.loc) + ": abort(...)"};
@@ -3837,7 +4049,8 @@ private:
         }
         int next_id = 1;
         for (auto& n : nodes) {
-            for (auto& [call, c] : n.calls) call->may_unwind = !nodes[c].need.empty();
+            // mode panic: setiap panggilan bisa membawa panic ke atas (push/OOM, #max_depth, panic(...))
+            for (auto& [call, c] : n.calls) call->may_unwind = panic_mode_ || !nodes[c].need.empty();
             for (FnDecl* t : n.direct)
                 if (!t->from_id) t->from_id = next_id++;
         }
@@ -3859,6 +4072,11 @@ private:
             for (const ExprPtr* e : {&s.e1, &s.e2, &s.e3})
                 if (*e) unwind_walk_expr(**e, n, owner, idx);
             for (auto& e : s.exprs) unwind_walk_expr(*e, n, owner, idx);
+            for (auto& e : s.defer_args) unwind_walk_expr(*e, n, owner, idx);
+            for (auto& a : s.sel) {
+                if (a.op) unwind_walk_expr(*a.op, n, owner, idx);
+                if (a.body) unwind_walk_block(*a.body, n, owner, idx);
+            }
             if (s.body) unwind_walk_block(*s.body, n, owner, idx);
             if (s.else_body) unwind_walk_block(*s.else_body, n, owner, idx);
             for (auto& a : s.arms) unwind_walk_block(*a.body, n, owner, idx);
@@ -4153,6 +4371,10 @@ private:
     std::unordered_map<const Expr*, Interval> grow_by_;  // append: rentang jumlah elemen yang ditambah
     std::set<Path> last_induct_;
     bool returning_ = false;
+    bool panic_mode_ = false;
+    bool in_defer_ = false;
+    size_t defer_scope_base_ = 0;
+    size_t defer_block_base_ = 0;
     FnDecl* fn_ = nullptr;
     Env env_;
     std::vector<LoopFrame> loops_;

@@ -1,0 +1,100 @@
+fn inner(n i64) i64 {
+    var xs [..]i64
+    for i := range 100 { xs.push(i) }
+    if n < 0 || n >= 10 { panic("bad index") }
+    return xs[n]
+}
+
+fn middle(n i64) i64 {
+    var buf [..]u8
+    buf.push(1)
+    defer print("middle cleanup")
+    return inner(n) +| len(buf)
+}
+
+fn safe(n i64) i64 {
+    defer {
+        if some msg := recover() { print("recovered: ", msg) }
+    }
+    return middle(n)
+}
+
+// recover tanpa mengambil pesan
+fn quiet(n i64) i64 {
+    defer { recover() }
+    return inner(n)
+}
+
+// panic di dalam defer menggantikan panic yang sedang berjalan
+fn replace() {
+    defer {
+        if some m := recover() { print("final: ", m) }
+    }
+    defer { panic("second") }
+    panic("first")
+}
+
+// panic dengan pesan buatan & panic ulang setelah recover
+fn rethrow(id i64) {
+    defer {
+        if some m := recover() {
+            print("rethrow saw: ", m)
+            panic("wrapped")
+        }
+    }
+    msg := str("bad id ", id)
+    panic(msg)
+}
+
+fn outer() {
+    defer {
+        if some m := recover() { print("outer got: ", m) }
+    }
+    rethrow(7)
+}
+
+// panic di dalam trailing block
+fn in_block(xs []i64) i64 {
+    defer {
+        if some m := recover() { print("block: ", m) }
+    }
+    var total i64
+    each(xs) { x =>
+        if x > 2 { panic("too large") }
+        total = total +| x
+    }
+    return total
+}
+
+// banyak panic + recover: region setiap frame dibebaskan (tidak bocor)
+fn stress() i64 {
+    var got i64
+    for i := range 200000 {
+        if quiet(i % 20) == 0 { if got < 1000000 { got++ } }
+    }
+    return got
+}
+
+fn main() {
+    print(safe(3))
+    print(safe(42))
+    print(quiet(50))
+    replace()
+    outer()
+    print(in_block([3]i64{1, 2, 3}))
+    print(in_block([2]i64{1, 2}))
+    print(stress())
+}
+// expect: middle cleanup
+// expect: 4
+// expect: middle cleanup
+// expect: recovered: bad index
+// expect: 0
+// expect: 0
+// expect: final: second
+// expect: rethrow saw: bad id 7
+// expect: outer got: wrapped
+// expect: block: too large
+// expect: 0
+// expect: 3
+// expect: 110000

@@ -1,0 +1,8 @@
+package lib
+
+fn Parse(n i64) i64 {
+    defer print("lib cleanup")
+    if n < 0 { panic("negative input") }
+    if n > 1000 { return 0 }
+    return n * 2
+}

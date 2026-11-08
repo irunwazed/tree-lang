@@ -606,6 +606,20 @@ private:
             case Tok::Ident: {
                 const std::string& w = cur().text;
                 if (w == "select" && peek().kind == Tok::LBrace) return parse_select();
+                if (w == "defer" && (peek().kind == Tok::LBrace || peek().kind == Tok::Ident)) {
+                    // defer f(args)  /  defer x.m(args)  /  defer { ... }
+                    next();
+                    auto s = std::make_unique<Stmt>(StmtKind::Defer, loc);
+                    if (at(Tok::LBrace)) {
+                        s->body = parse_block();
+                    } else {
+                        s->e1 = parse_expr(true);
+                        if (s->e1->kind != ExprKind::Call)
+                            diag_.error(s->e1->loc, "'defer' takes a function call or a block",
+                                        "e.g. 'defer close_file(f)' or 'defer { ... }'");
+                    }
+                    return s;
+                }
                 if (w == "let" || w == "while" || w == "loop" || w == "guard") {
                     const char* help = w == "let"     ? "declare with 'x := value' or 'var x T'"
                                        : w == "while" ? "use 'for condition { ... }'"

@@ -53,7 +53,7 @@
       "patterns": [
         {
           "name": "keyword.control.tree-lang",
-          "match": "\\b(if|else|for|range|match|break|continue|return|from|spawn)\\b"
+          "match": "\\b(if|else|for|range|match|break|continue|return|from|spawn|run|select|defer|panic|recover)\\b"
         },
         {
           "name": "keyword.other.tree-lang",

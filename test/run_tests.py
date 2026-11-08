@@ -3,6 +3,7 @@
   test/ok/*.tree   harus lolos compile dan mencetak tepat baris-baris `// expect: ...`.
                    Setiap test dijalankan 3 kali: -O2, -O0, dan --debug (semua bukti
                    compile-time diverifikasi ulang saat runtime). Output harus identik.
+                   `// env: K=V` mengatur variabel lingkungan; `// stderr: teks` wajib muncul di stderr.
   test/err/*.tree  harus DITOLAK compiler (exit 1) dan stderr memuat setiap `// error: ...`.
   test/pkg/ok/<modul>/, test/pkg/err/<modul>/
                    program multi-package (folder dengan forest.json); direktif ditulis di main.tree
@@ -33,8 +34,12 @@ def directives(path, key):
     return out
 
 
-def run(cmd):
-    p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+def run(cmd, env=None):
+    full = None
+    if env:
+        full = dict(os.environ)
+        full.update(env)
+    p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", env=full)
     return p.returncode, p.stdout, p.stderr
 
 
@@ -42,8 +47,13 @@ def check_ok(exe, path):
     want = directives(path, "expect")
     want_exit = directives(path, "exit")
     want_code = int(want_exit[0]) if want_exit else 0
+    env = dict(kv.split("=", 1) for kv in directives(path, "env"))  # // env: K=V (untuk program)
+    want_err = directives(path, "stderr")
     for mode in MODES:
-        code, out, err = run([exe, "run", str(path)] + mode)
+        code, out, err = run([exe, "run", str(path)] + mode, env)
+        missing = [w for w in want_err if w not in err]
+        if missing:
+            return f"{' '.join(mode)}: missing on stderr: {missing}\n{err}"
         got = out.splitlines()
         if code != want_code:
             return f"{' '.join(mode)}: exit code {code} (want {want_code})\n{err}"

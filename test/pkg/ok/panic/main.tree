@@ -1,0 +1,15 @@
+package main
+
+import "pp/lib"
+
+fn main() {
+    defer {
+        if some m := recover() { print("main recovered: ", m) }
+    }
+    print(lib.Parse(5))
+    print(lib.Parse(-1))
+}
+// expect: lib cleanup
+// expect: 10
+// expect: lib cleanup
+// expect: main recovered: negative input

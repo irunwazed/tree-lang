@@ -71,4 +71,5 @@ docs/spec.md                    spesifikasi bahasa (termasuk array & model memor
 - [x] **M8** goroutine `run f(...)` + channel `chan[T](n)`, `<-`, `select`, `close`, `wait` (scheduler M:N, tanpa memori bersama → tanpa data race, move `[..]T` lewat channel, deteksi deadlock)
 - [x] **M9** `unsafe extern fn` (FFI C + sidecar `.c`), stdlib OS (file/env/arg/waktu/`str`/`parse_int`), `#max_depth(N)` + analisis stack native, `--unsafe-report`/`--panic-report`, highlighting VS Code
 - [x] **Package** ala Go: `forest.json` (`{"module": "myapp"}`), satu folder = satu package, `import "myapp/geo"` / alias / `import ( ... )`, ekspor huruf besar; import tak terpakai, siklik, dan shadowing ditolak saat compile
+- [x] **defer / panic / recover** ala Go: `defer f(x)` / `defer { ... }` (LIFO, tidak di loop), `panic("msg")`, `if some msg := recover()` di defer; `#max_depth` dan kehabisan memori menjadi panic yang bisa di-recover; `abort` tetap fatal; tanpa biaya bila tidak dipakai
 - [ ] M10 benchmark vs C dan Rust

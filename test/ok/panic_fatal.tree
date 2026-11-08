@@ -1,0 +1,13 @@
+// tanpa defer/recover di program: panic langsung fatal (tanpa biaya)
+fn check(n i64) {
+    if n > 1 { panic("n too big") }
+}
+
+fn main() {
+    check(1)
+    print("ok so far")
+    check(2)
+}
+// expect: ok so far
+// stderr: panic: n too big
+// exit: 101

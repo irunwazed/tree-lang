@@ -21,6 +21,10 @@
 #endif
 
 _Noreturn void tl_abort(const char* msg, int64_t n);
+void tl_panic_set(const char* msg, int64_t n);
+/* 1 bila program memakai defer/recover: kegagalan alokasi menjadi panic (bisa di-recover) */
+extern const int32_t tl_panic_mode;
+#define TL_PANIC (-1)
 
 /* ---------------- region data untuk array tumbuh [..]T ----------------
  * Setiap array tumbuh memiliki satu region alamat virtual yang dicadangkan sekali
@@ -107,22 +111,33 @@ static void region_release(char* base) {
 }
 
 /* Pastikan minimal 'need' byte ter-commit. Data lama tidak berpindah. */
-void tl_dyn_reserve(tl_dyn* d, int64_t need) {
+/* Kegagalan alokasi: panic (mode panic, array tidak berubah) atau abort. */
+static int32_t alloc_fail(const char* msg, int64_t n) {
+    if (tl_panic_mode) {
+        tl_panic_set(msg, n);
+        return 0;
+    }
+    tl_abort(msg, n);
+}
+
+/* Pastikan minimal 'need' byte ter-commit. Data lama tidak berpindah. 1 = berhasil. */
+int32_t tl_dyn_reserve(tl_dyn* d, int64_t need) {
     static const char too_big[] = "growable array exceeds its reserved address space (TL_RESERVE_MB)";
     static const char oom[] = "out of memory";
-    if (need <= d->cap) return;
-    if (need < 0 || need > tl_reserve) tl_abort(too_big, (int64_t)sizeof too_big - 1);
+    if (need <= d->cap) return 1;
+    if (need < 0 || need > tl_reserve) return alloc_fail(too_big, (int64_t)sizeof too_big - 1);
     if (!d->data) {
         if (tl_pool_n > 0) {
             tl_pool_n--;
             d->data = tl_pool[tl_pool_n].base;
             d->cap = tl_pool[tl_pool_n].committed;
             live_add(d->data);
-            if (need <= d->cap) return;
+            if (need <= d->cap) return 1;
         } else {
-            d->data = region_reserve();
+            char* base = region_reserve();
+            if (!base) return alloc_fail(oom, (int64_t)sizeof oom - 1);
+            d->data = base;
             d->cap = 0;
-            if (!d->data) tl_abort(oom, (int64_t)sizeof oom - 1);
             live_add(d->data);
         }
     }
@@ -130,8 +145,9 @@ void tl_dyn_reserve(tl_dyn* d, int64_t need) {
     if (cap < need) cap = need;
     cap = (cap + 4095) & ~(int64_t)4095;
     if (cap > tl_reserve) cap = tl_reserve;
-    if (!region_commit(d->data, d->cap, cap)) tl_abort(oom, (int64_t)sizeof oom - 1);
+    if (!region_commit(d->data, d->cap, cap)) return alloc_fail(oom, (int64_t)sizeof oom - 1);
     d->cap = cap;
+    return 1;
 }
 
 void tl_dyn_free(tl_dyn* d) {
@@ -176,10 +192,11 @@ typedef struct {
     int64_t link_limit; /* jumlah elemen: setiap Link[T] harus < nilai ini */
 } tl_cursor;
 
-void tl_bytes_put(tl_dyn* out, const void* p, int64_t n) {
-    tl_dyn_reserve(out, out->len + n);
+int32_t tl_bytes_put(tl_dyn* out, const void* p, int64_t n) {
+    if (!tl_dyn_reserve(out, out->len + n)) return 0; /* panic: tidak menulis apa pun */
     memcpy(out->data + out->len, p, (size_t)n);
     out->len += n;
+    return 1;
 }
 
 /* 1 = berhasil; 0 = data habis (dst tidak diubah) */
@@ -265,7 +282,9 @@ typedef struct tl_g {
     int is_main;
     int finished;
     volatile long running;      /* 1 selama stack goroutine ini dipakai sebuah worker */
-    int32_t unwind;             /* 'return ... from' yang sedang berjalan (id target) */
+    int32_t unwind;             /* 'return ... from' yang sedang berjalan (id target), TL_PANIC = panic */
+    char* panic_msg;            /* pesan panic yang sedang berjalan (malloc, milik runtime) */
+    int64_t panic_len;
     char* from_vals;            /* slot nilai 'return ... from' per target */
     /* parkir: siapa pun yang membangunkan harus 'mengklaim' dulu (select/timer bisa berebut) */
     volatile long claimed;
@@ -600,7 +619,18 @@ static void g_main(void* p) {
     if (setjmp(jb) == 0) {
         g->entry(g->args);
         ok = 1;
+        if (g->unwind == TL_PANIC) {
+            /* panic yang tidak di-recover: semua frame sudah menjalankan defer & membebaskan miliknya */
+            fflush(stdout);
+            fputs(g->is_main ? "panic: " : "panic (goroutine): ", stderr);
+            fwrite(g->panic_msg, 1, (size_t)g->panic_len, stderr);
+            fputc('\n', stderr);
+            if (g->is_main) exit(101);
+            ok = 0;
+        }
     }
+    free(g->panic_msg);
+    g->panic_msg = NULL;
     if (g->is_main) {
         fflush(stdout);
         exit(0); /* main selesai: program selesai (goroutine lain ikut berhenti) */
@@ -1076,7 +1106,8 @@ static int32_t load_file(FILE* f, tl_dyn* out) {
     char buf[1 << 15];
     size_t n;
     out->len = 0;
-    while ((n = fread(buf, 1, sizeof buf, f)) > 0) tl_bytes_put(out, buf, (int64_t)n);
+    while ((n = fread(buf, 1, sizeof buf, f)) > 0)
+        if (!tl_bytes_put(out, buf, (int64_t)n)) return 0;
     return !ferror(f);
 }
 
@@ -1130,7 +1161,7 @@ int32_t tl_os_read_line(tl_dyn* out) {
         any = 1;
         if (c == '\n') break;
         char ch = (char)c;
-        tl_bytes_put(out, &ch, 1);
+        if (!tl_bytes_put(out, &ch, 1)) return 0;
     }
     if (out->len > 0 && out->data[out->len - 1] == '\r') out->len--;
     return any;
@@ -1254,6 +1285,54 @@ _Noreturn void tl_abort(const char* msg, int64_t n) {
     fflush(stdout);
     int worker = tl_cur_g && !tl_cur_g->is_main;
     fputs(worker ? "abort (goroutine): " : "abort: ", stderr);
+    fwrite(msg, 1, (size_t)n, stderr);
+    fputc('\n', stderr);
+    if (worker) longjmp(*tl_cur_g->jb, 1);
+    exit(101);
+}
+
+/* ---------------- panic ---------------- */
+
+static char* tl_boot_panic_msg;
+static int64_t tl_boot_panic_len;
+
+/* Mulai (atau ganti) panic pada goroutine ini. Frame-frame membuka diri lewat flag unwind. */
+void tl_panic_set(const char* msg, int64_t n) {
+    tl_g* g = tl_cur_g;
+    char** pm = g ? &g->panic_msg : &tl_boot_panic_msg;
+    int64_t* pl = g ? &g->panic_len : &tl_boot_panic_len;
+    char* copy = (char*)malloc(n > 0 ? (size_t)n : 1);
+    if (copy && n > 0) memcpy(copy, msg, (size_t)n);
+    free(*pm);
+    *pm = copy;
+    *pl = copy ? n : 0;
+    *tl_unwind_ptr() = TL_PANIC;
+}
+
+/* recover(): pindahkan pesan panic ke [..]u8 baru. Compiler sudah memastikan sedang panic. */
+void tl_recover(tl_dyn* out) {
+    tl_g* g = tl_cur_g;
+    char** pm = g ? &g->panic_msg : &tl_boot_panic_msg;
+    int64_t* pl = g ? &g->panic_len : &tl_boot_panic_len;
+    char* m = *pm;
+    int64_t l = *pl;
+    *pm = NULL;
+    *pl = 0;
+    out->len = 0;
+    /* tidak muat (kehabisan memori) → panic baru "out of memory", ditangani compiler seperti
+       panic lain di dalam defer */
+    if (l > 0 && tl_dyn_reserve(out, l)) {
+        memcpy(out->data, m, (size_t)l);
+        out->len = l;
+    }
+    free(m);
+}
+
+/* panic di program tanpa defer/recover: tidak ada yang bisa menangkap, jadi langsung fatal. */
+_Noreturn void tl_panic_fatal(const char* msg, int64_t n) {
+    fflush(stdout);
+    int worker = tl_cur_g && !tl_cur_g->is_main;
+    fputs(worker ? "panic (goroutine): " : "panic: ", stderr);
     fwrite(msg, 1, (size_t)n, stderr);
     fputc('\n', stderr);
     if (worker) longjmp(*tl_cur_g->jb, 1);

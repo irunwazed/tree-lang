@@ -1,0 +1,59 @@
+fn bad_loop() {
+    for i := range 3 {
+        defer print(i)
+    }
+}
+
+fn bad_block(xs []i64) {
+    each(xs) { x =>
+        defer print(x)
+    }
+}
+
+fn bad_return() i64 {
+    defer { return 1 }
+    return 0
+}
+
+fn bad_scope(c bool) {
+    if c {
+        y := 3
+        defer { print(y) }
+    }
+}
+
+fn bad_arg() {
+    var xs [..]i64
+    defer print(xs)
+}
+
+fn bad_mutate() {
+    var xs [..]i64
+    defer { xs.push(1) }
+}
+
+fn bad_handle() Chan[i64] {
+    defer { recover() }
+    return chan[i64](1)
+}
+
+fn bad_nested() {
+    defer {
+        defer print("x")
+    }
+}
+
+fn main() {
+    recover()
+    panic(42)
+}
+// error: 'defer' inside a loop would pile up until the function returns
+// error: 'defer' is not allowed inside a block argument
+// error: 'return' is not allowed inside defer
+// error: 'y' lives in an inner block and is gone when the defer runs
+// error: a deferred call cannot capture [..]i64 by value
+// error: defer cannot change 'xs'
+// error: has no usable zero value
+// error: 'defer' cannot be nested inside another defer
+// error: 'recover' only works directly inside 'defer { ... }'
+// error: 'panic' takes a string message, found i64

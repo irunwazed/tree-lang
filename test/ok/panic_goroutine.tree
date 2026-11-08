@@ -1,0 +1,26 @@
+fn crash(out Chan[i64]) {
+    defer { _ = out <- 1 }
+    panic("goroutine broke")
+}
+
+fn survive(out Chan[i64]) {
+    defer {
+        if some _ := recover() { _ = out <- 2 }
+    }
+    panic("handled")
+}
+
+fn main() {
+    out := chan[i64](4)
+    a := run crash(out)
+    b := run survive(out)
+    print(wait(a), " ", wait(b))
+    var total i64
+    for _i := range 2 {
+        if some v := <-out { total = total +| v }
+    }
+    print(total)
+}
+// expect: false true
+// expect: 3
+// stderr: panic (goroutine): goroutine broke

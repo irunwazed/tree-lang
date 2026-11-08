@@ -1,0 +1,23 @@
+// melampaui #max_depth menjadi panic yang bisa di-recover
+#max_depth(50)
+fn down(n i64) i64 {
+    if n <= 0 { return 0 }
+    return down(n - 1) +| 1
+}
+
+fn try_down(n i64) i64 {
+    defer {
+        if some m := recover() { print(m) }
+    }
+    return down(n)
+}
+
+fn main() {
+    print(try_down(10))
+    print(try_down(1000))
+    print(try_down(20))
+}
+// expect: 10
+// expect: recursion in 'down' exceeded #max_depth(50)
+// expect: 0
+// expect: 20

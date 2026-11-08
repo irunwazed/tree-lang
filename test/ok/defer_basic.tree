@@ -1,0 +1,74 @@
+// defer: LIFO saat fungsi keluar; argumen dievaluasi saat 'defer' ditulis, block melihat nilai akhir.
+fn order() {
+    defer print("1")
+    defer print("2")
+    var x i64 = 5
+    defer print("x at defer: ", x)
+    defer { print("x at exit: ", x) }
+    if x > 3 { defer print("armed") }
+    if x > 100 { defer print("never armed") }
+    x = 9
+    print("body")
+}
+
+fn early(n i64) i64 {
+    defer print("early done ", n)
+    if n > 0 { return n }
+    var xs [..]i64
+    xs.push(7)
+    defer { print("len ", len(xs)) }
+    return 0
+}
+
+// return xs: hasil dipindahkan; defer setelahnya melihat array kosong (bukan memori yang sudah dibebaskan)
+fn build() [..]i64 {
+    var xs [..]i64
+    defer { print("build defer len ", len(xs)) }
+    for i := range 3 { xs.push(i) }
+    return xs
+}
+
+type Counter struct {
+    hits i64
+}
+
+fn (c &Counter) bump() { if c.hits < 100 { c.hits++ } }
+
+fn count() i64 {
+    var c Counter
+    defer c.bump()          // receiver &T: mengubah c saat keluar
+    c.bump()
+    return c.hits
+}
+
+fn finder(xs []i64) i64 {
+    defer print("finder exit")
+    each(xs) { x =>
+        if x == 3 { return x from finder }
+    }
+    return -1
+}
+
+fn main() {
+    order()
+    print(early(4), " ", early(0))
+    ys := build()
+    print(ys)
+    print(count())
+    print(finder([4]i64{1, 2, 3, 4}))
+}
+// expect: body
+// expect: armed
+// expect: x at exit: 9
+// expect: x at defer: 5
+// expect: 2
+// expect: 1
+// expect: early done 4
+// expect: len 1
+// expect: early done 0
+// expect: 4 0
+// expect: build defer len 0
+// expect: [0, 1, 2]
+// expect: 1
+// expect: finder exit
+// expect: 3

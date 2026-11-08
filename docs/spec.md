@@ -445,6 +445,66 @@ fn main() {
 - Pesan error dan `print` menampilkannya sebagai `geo.Dist2` / `geo.Point { X: 1, Y: 2 }`.
 - Setiap error menunjuk file asalnya di dalam package.
 
+## 6k. `defer`, `panic`, `recover`
+
+```
+fn process(path []u8) i64 {
+    defer print("selesai")                  // panggilan: argumen dievaluasi SEKARANG
+    defer {                                 // block: dijalankan saat keluar, melihat nilai akhir
+        if some msg := recover() { print("recovered: ", msg) }
+    }
+    if len(path) == 0 { panic("empty path") }
+    return parse(path)
+}
+```
+
+**defer** mengikuti Go: berjalan saat **fungsi** selesai, urutannya LIFO.
+- Jalan keluarnya bisa berupa:
+  - akhir fungsi;
+  - `return`;
+  - `return e from f` yang melintasi fungsi itu;
+  - panic.
+- Bentuknya ada dua:
+  - **`defer f(args)`** atau `defer x.m(args)`: argumen dievaluasi saat `defer` ditulis. Receiver `&T` (misalnya `defer c.bump()`) tetap menunjuk variabelnya.
+  - **`defer { ... }`**: dijalankan di titik keluar, jadi membaca nilai akhir variabel.
+- `defer` di dalam `if` hanya berjalan bila `defer`-nya sempat dieksekusi.
+- Setelah `return xs`, array `xs` sudah dipindahkan ke pemanggil, jadi defer melihatnya kosong (bukan memori yang sudah dibebaskan).
+- Hasil fungsi ditentukan sebelum defer berjalan. Defer tidak bisa mengubahnya.
+
+**panic(msg)** menerima string literal, `[]u8`, atau `[..]u8`.
+- Saat panic, setiap frame menjalankan defer-nya, membebaskan region miliknya, lalu kembali ke pemanggil.
+- Panic baru di dalam defer menggantikan pesan panic yang sedang berjalan, dan defer sisanya tetap dijalankan.
+- Selain `panic(...)`, dua kegagalan runtime juga menjadi panic yang bisa di-recover:
+  - melampaui `#max_depth(N)`, dengan pesan `recursion in 'f' exceeded #max_depth(N)`;
+  - kehabisan memori atau melebihi reservasi array (`TL_RESERVE_MB`). Array yang sedang ditambah tetap utuh.
+
+**recover()** hanya sah langsung di dalam `defer { ... }`.
+- `if some msg := recover() { ... }` menghentikan panic, dan `msg` memiliki pesannya sebagai `[..]u8`.
+- `recover()` sebagai statement menghentikan panic dan membuang pesannya.
+- Fungsi yang berhasil recover mengembalikan **nilai nol** tipe hasilnya (seperti `var x T`).
+
+**Tidak di-recover.**
+- Di main, defer tetap dijalankan, lalu `panic: <msg>` dicetak dan program keluar dengan exit 101.
+- Di goroutine, yang dicetak `panic (goroutine): <msg>`, dan `wait(t)` → `false`. Goroutine lain tidak terpengaruh.
+
+**`abort(...)` tetap fatal** dan tidak bisa di-recover. Gunakan `abort` untuk "ini tidak boleh terjadi", dan `panic` untuk kegagalan yang boleh ditangani pemanggil di atas.
+
+**Aturan compile (ketat):**
+- `defer` tidak boleh berada di dalam loop, di dalam trailing block, atau di dalam defer lain.
+- Di dalam defer **dilarang** `return`. Variabel yang **boleh dipakai** hanya parameter dan variabel di scope terluar fungsi, karena variabel scope dalam sudah mati saat fungsi keluar.
+- Variabel pemilik (`[..]T`) di dalam defer hanya boleh dibaca: tidak boleh di-assign, di-`push`, atau di-move. Nilai biasa boleh diubah.
+- Argumen `defer f(args)` tidak boleh berupa `[..]T`, slice, atau referensi ke variabel scope dalam. Pakai `defer { ... }` untuk itu.
+- Fungsi berisi `recover` tidak boleh mengembalikan tipe yang memuat `Chan`/`Task`, karena nilai nolnya tidak bisa dipakai.
+- `treelang check --panic-report` mencantumkan setiap `panic(...)` dan `abort(...)`.
+
+**Biaya.**
+- Program yang sama sekali tidak memakai `defer`/`recover` memakai **mode fatal**: `panic` langsung menghentikan program/goroutine, dan IR-nya sama dengan sebelum fitur ini ada.
+- Program yang memakai `defer`/`recover` memakai **mode panic**:
+  - setiap panggilan diikuti satu `load` + cabang pada flag unwind goroutine (pointer flag diambil sekali per fungsi);
+  - setiap alokasi di jalur lambat `push` dicek hasilnya;
+  - fungsi tanpa defer tidak membayar apa pun selain itu.
+- Implementasinya memakai ulang mesin `return e from f`: panic adalah id unwind khusus. Setiap frame membebaskan miliknya sendiri, jadi tidak ada `longjmp` yang melewati region hidup.
+
 ## 7. Pembuktian keamanan
 Compiler melacak rentang setiap integer: variabel **dan** field (`p.x`, `a.b.c`).
 - Fakta diambil dari literal, konstanta, nilai nol, literal struct, kondisi `if`/`for`/`&&`/`||`, dan rentang `for ... range`.

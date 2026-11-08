@@ -93,6 +93,7 @@ enum class Builtin {
     Send, Recv, TryRecv, Join,                                       // (lama, M8)
     Close, Wait,                                                     // close(ch) / wait(task)
     Str,                                                             // str(a, b, ...) -> [..]u8
+    Panic, Recover,                                                  // panic(msg) / recover() di defer
 };
 
 struct Expr {
@@ -193,6 +194,7 @@ enum class StmtKind {
     Block,
     Match,     // match e { Pola { ... } ... }
     Select,    // select { x := <-a { } ok := b <- v { } timeout(ms) { } default { } }
+    Defer,     // defer f(args)  (e1 = panggilan)   /   defer { ... }  (body)
 };
 
 
@@ -226,6 +228,10 @@ struct Stmt {
     std::vector<MatchArm> arms;  // Match
     std::vector<SelectArm> sel;  // Select
     bool range_chan = false;     // sema: for x := range ch
+    // Defer (sema): argumen yang dievaluasi saat 'defer' ditulis → disimpan di variabel tersembunyi
+    std::vector<ExprPtr> defer_args;     // ekspresi asli (dievaluasi di titik defer)
+    std::vector<VarInfo*> defer_slots;   // slot tersembunyi, sejajar defer_args
+    int defer_id = -1;                   // indeks di FnDecl::defers (urutan tulis)
 
     Stmt(StmtKind k, Loc l) : kind(k), loc(l) {}
 };
@@ -266,7 +272,8 @@ struct FnDecl {
     std::vector<Type*> type_args;
     std::vector<FnBinding> bindings;  // per parameter (hanya untuk parameter bertipe fungsi)
     std::string inst_name;
-    int from_id = 0;  // sema: > 0 bila ada 'return ... from <fungsi ini>' 
+    int from_id = 0;  // sema: > 0 bila ada 'return ... from <fungsi ini>'
+    std::vector<struct Stmt*> defers;  // sema: semua 'defer' di fungsi ini (urutan tulis)
     // method: fn (p Point) area() i64  →  receiver = p, receiver_type = Point
     bool has_receiver = false;
     Param receiver;

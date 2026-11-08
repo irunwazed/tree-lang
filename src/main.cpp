@@ -56,7 +56,7 @@ void usage() {
         "  -v          print the clang command line\n"
         "  --c <file>  compile and link an extra C source (also: <file>.c next to the program)\n"
         "  --unsafe-report  list every 'unsafe extern fn' and every call to one (check)\n"
-        "  --panic-report   list every explicit abort(...) (check)\n"
+        "  --panic-report   list every explicit abort(...) and panic(...) (check)\n"
         "  -- <args>   pass the remaining arguments to the program (run)\n",
         kCliName, kVersion, kLangName, kCliName, kSourceExt, kCliName, kSourceExt, kCliName, kSourceExt, kCliName,
         kSourceExt);
@@ -125,7 +125,7 @@ bool compile_to_ll(const Options& o, std::string& ll, bool want_codegen, LoadedP
         for (auto& l : sema.unsafe_report) std::printf("  %s\n", display_text(l).c_str());
     }
     if (o.panic_report) {
-        std::printf("explicit aborts:\n");
+        std::printf("explicit aborts and panics:\n");
         if (sema.panic_report.empty()) std::printf("  none\n");
         for (auto& l : sema.panic_report) std::printf("  %s\n", display_text(l).c_str());
     }
