@@ -1,10 +1,10 @@
-// treelang: driver CLI untuk compiler tree-lang.
+// forest: driver CLI untuk compiler tree-lang.
 //
-//   treelang run   <file.tree> [-O0] [--debug] [-v]   kompilasi lalu jalankan
-//   treelang build <file.tree> [-o out.exe] [...]     buat executable
-//   treelang check <file.tree>                        hanya periksa (tanpa codegen)
-//   treelang emit  <file.tree> [-o out.ll]            tulis LLVM IR
-//   treelang <file.tree>                              sama dengan 'run'
+//   forest run   <file.tree> [-O0] [--debug] [-v]   kompilasi lalu jalankan
+//   forest build <file.tree> [-o out.exe] [...]     buat executable
+//   forest check <file.tree>                        hanya periksa (tanpa codegen)
+//   forest emit  <file.tree> [-o out.ll]            tulis LLVM IR
+//   forest <file.tree>                              sama dengan 'run'
 //
 // Input boleh berupa folder (atau file di dalam folder) yang memiliki forest.json di atasnya:
 // semua file .tree di folder itu menjadi package main, dan import dimuat dari root modul.
@@ -221,7 +221,7 @@ int main(int argc, char** argv) {
 
     std::string runtime = find_runtime_dir(argv[0]);
     if (runtime.empty()) {
-        std::fprintf(stderr, "error: runtime directory not found (set TREELANG_RUNTIME)\n");
+        std::fprintf(stderr, "error: runtime directory not found (set FOREST_RUNTIME)\n");
         return 1;
     }
     std::string stem = in.stem().string() + "-" + std::to_string(getpid());

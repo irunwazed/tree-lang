@@ -1,4 +1,4 @@
-// treelang run samples/http_hello/main.tree   lalu buka http://localhost:3000/
+// forest run samples/http_hello/main.tree   lalu buka http://localhost:3000/
 import "std/http"
 
 fn hello(c &http.Ctx) { c.SendString("Hello, World!") }

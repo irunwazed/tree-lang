@@ -9,7 +9,7 @@
                    program multi-package (folder dengan forest.json); direktif ditulis di main.tree
                    dan compiler dipanggil dengan folder itu sebagai input.
 
-Pemakaian: python test/run_tests.py <path ke treelang.exe> [filter]
+Pemakaian: python test/run_tests.py <path ke forest.exe> [filter]
 """
 import concurrent.futures
 import os

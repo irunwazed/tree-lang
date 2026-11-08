@@ -680,7 +680,7 @@ private:
         fs::path dir = fs::path(stdlib_dir()) / fs::path(rel);
         if (rel.empty() || rel.find("..") != std::string::npos || stdlib_dir().empty() || !fs::is_directory(dir, ec)) {
             d_.error(im.loc, "standard package \"" + path + "\" not found",
-                     stdlib_dir().empty() ? "the stdlib folder was not found next to treelang (set TREELANG_STDLIB)"
+                     stdlib_dir().empty() ? "the stdlib folder was not found next to forest (set FOREST_STDLIB)"
                                           : "available packages are folders in " + show_path(stdlib_dir()));
             return false;
         }

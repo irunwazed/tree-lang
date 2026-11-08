@@ -1,4 +1,4 @@
-# Build compiler treelang (Release) memakai CMake bawaan Visual Studio.
+# Build compiler forest (Release) memakai CMake bawaan Visual Studio.
 # Pemakaian:  .\build.ps1          build
 #             .\build.ps1 -Test    build lalu jalankan semua test
 param([switch]$Test)
@@ -27,9 +27,9 @@ if (-not (Test-Path "build\CMakeCache.txt")) {
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 if ($Test) {
-    python test\run_tests.py build\Release\treelang.exe
+    python test\run_tests.py build\Release\forest.exe
     $rc = $LASTEXITCODE
-    python test\http_tests.py build\Release\treelang.exe --quick
+    python test\http_tests.py build\Release\forest.exe --quick
     if ($LASTEXITCODE -ne 0) { $rc = $LASTEXITCODE }
     exit $rc
 }

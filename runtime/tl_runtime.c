@@ -1365,7 +1365,7 @@ _Noreturn void tl_internal_fail(int32_t code) {
     fflush(stdout);
     fprintf(stderr,
             "internal compiler error: a property proven at compile time failed at runtime (%s).\n"
-            "This is a bug in treelang, please report it.\n",
+            "This is a bug in forest, please report it.\n",
             (code >= 1 && code <= 6) ? what[code] : what[0]);
     exit(102);
 }

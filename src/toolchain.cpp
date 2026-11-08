@@ -99,7 +99,7 @@ static bool on_path(const std::string& exe) {
 }
 
 std::string find_clang() {
-    if (const char* env = std::getenv("TREELANG_CLANG")) return env;
+    if (const char* env = std::getenv("FOREST_CLANG")) return env;
     if (on_path("clang")) return "clang";
 #ifdef _WIN32
     const char* candidates[] = {"C:\\Program Files\\LLVM\\bin\\clang.exe"};
@@ -114,7 +114,7 @@ std::string find_clang() {
 }
 
 std::string find_runtime_dir(const std::string& argv0) {
-    if (const char* env = std::getenv("TREELANG_RUNTIME")) return env;
+    if (const char* env = std::getenv("FOREST_RUNTIME")) return env;
     std::error_code ec;
     fs::path exe = fs::absolute(argv0, ec);
 #ifdef _WIN32
@@ -132,7 +132,7 @@ std::string find_runtime_dir(const std::string& argv0) {
 }
 
 std::string find_stdlib_dir(const std::string& argv0) {
-    if (const char* env = std::getenv("TREELANG_STDLIB")) return env;
+    if (const char* env = std::getenv("FOREST_STDLIB")) return env;
     std::error_code ec;
     fs::path exe = fs::absolute(argv0, ec);
 #ifdef _WIN32
@@ -148,21 +148,21 @@ std::string find_stdlib_dir(const std::string& argv0) {
     return "";
 }
 
-// Folder kerja sementara: TREELANG_TMP, atau 'tmp' di samping treelang.exe.
+// Folder kerja sementara: FOREST_TMP, atau 'tmp' di samping forest.exe.
 // (Tidak memakai %TEMP% agar tidak membebani drive sistem.)
 std::string temp_dir() {
     std::error_code ec;
     fs::path t;
-    if (const char* env = std::getenv("TREELANG_TMP")) {
+    if (const char* env = std::getenv("FOREST_TMP")) {
         t = env;
     } else {
 #ifdef _WIN32
         char buf[MAX_PATH];
         DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
-        t = (n > 0 && n < MAX_PATH) ? fs::path(buf).parent_path() / "tmp" : fs::temp_directory_path(ec) / "treelang";
+        t = (n > 0 && n < MAX_PATH) ? fs::path(buf).parent_path() / "tmp" : fs::temp_directory_path(ec) / "forest";
 #else
         t = fs::read_symlink("/proc/self/exe", ec).parent_path() / "tmp";
-        if (ec) t = fs::temp_directory_path(ec) / "treelang";
+        if (ec) t = fs::temp_directory_path(ec) / "forest";
 #endif
     }
     fs::create_directories(t, ec);
@@ -185,7 +185,7 @@ bool link_executable(const std::string& ll_path, const std::string& runtime_dir,
     std::string clang = find_clang();
     if (clang.empty()) {
         std::fprintf(stderr,
-                     "error: clang not found. Install LLVM (e.g. 'winget install LLVM.LLVM') or set TREELANG_CLANG.\n");
+                     "error: clang not found. Install LLVM (e.g. 'winget install LLVM.LLVM') or set FOREST_CLANG.\n");
         return false;
     }
     std::vector<std::string> args = {clang,

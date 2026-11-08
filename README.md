@@ -35,13 +35,14 @@ Package belum ada: kata `import` dicadangkan untuk package manager resmi yang ak
 - Python 3 (untuk test)
 
 ## Build & jalankan
+CLI-nya bernama **forest** (membaca `forest.json`); bahasanya bernama **tree-lang** (file `.tree`).
 ```powershell
-.\build.ps1                 # build compiler → build\Release\treelang.exe
+.\build.ps1                 # build compiler → build\Release\forest.exe
 .\build.ps1 -Test           # build + jalankan semua test
-build\Release\treelang.exe run samples\01_halo.tree
-build\Release\treelang.exe build samples\01_halo.tree     # → samples\01_halo.exe
-build\Release\treelang.exe check file.tree                # hanya pemeriksaan + pembuktian
-build\Release\treelang.exe emit file.tree -o file.ll      # lihat LLVM IR
+build\Release\forest.exe run samples\01_halo.tree
+build\Release\forest.exe build samples\01_halo.tree     # → samples\01_halo.exe
+build\Release\forest.exe check file.tree                # hanya pemeriksaan + pembuktian
+build\Release\forest.exe emit file.tree -o file.ll      # lihat LLVM IR
 ```
 Opsi: `-O0`, `--debug` (verifikasi ulang semua bukti saat runtime), `-v`.
 

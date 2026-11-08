@@ -1,6 +1,6 @@
 """Test std/http: build test/http/app.tree, jalankan, lalu kirim request HTTP mentah lewat socket.
 
-Pemakaian: python test/http_tests.py <treelang.exe> [--quick]
+Pemakaian: python test/http_tests.py <forest.exe> [--quick]
 Setiap mode (-O2 dan --debug) menjalankan semua kasus; --quick hanya -O2 tanpa uji beban besar.
 """
 import os

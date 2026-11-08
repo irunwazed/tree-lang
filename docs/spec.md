@@ -360,7 +360,7 @@ unsafe extern fn fill(out &i64, v i64)      // &T  → ptr
 - Tipe parameter yang diizinkan: angka, bool (sebagai `int`), `[]T` dan `&T` dengan `T` datar. Hasil: angka, bool, atau tanpa nilai.
 - File `<program>.c` di samping `<program>.tree` dikompilasi otomatis. File C lain bisa ditambahkan dengan `--c file.c`.
 - Kata `unsafe` wajib. Tanpa `unsafe`, program ditolak.
-- `treelang check --unsafe-report` mendaftar semua deklarasi dan pemanggilan FFI, yaitu semua tempat yang keamanannya bergantung pada kode C.
+- `forest check --unsafe-report` mendaftar semua deklarasi dan pemanggilan FFI, yaitu semua tempat yang keamanannya bergantung pada kode C.
 
 **Stdlib** (prelude: pembungkus aman di atas runtime; kegagalan selalu lewat `bool` / `T?`):
 
@@ -368,7 +368,7 @@ unsafe extern fn fill(out &i64, v i64)      // &T  → ptr
 |---|---|
 | `read_file(path, &out) bool`, `write_file(path, data) bool`, `append_file`, `file_exists`, `delete_file` | file |
 | `read_line(&out) bool`, `write_stderr(s)` | stdin/stderr |
-| `arg_count() i64`, `arg(i, &out) bool`, `env(name, &out) bool` | argumen (`treelang run f.tree -- a b`) & lingkungan |
+| `arg_count() i64`, `arg(i, &out) bool`, `env(name, &out) bool` | argumen (`forest run f.tree -- a b`) & lingkungan |
 | `time_ns()`, `clock_ns()`, `sleep_ms(ms)`, `random_seed() u64` | waktu |
 | `str(a, b, ...) [..]u8` | membangun string dengan format yang sama seperti `print` |
 | `parse_int(s) i64?`, `parse_float(s) f64?` | parsing ketat (overflow → `none`) |
@@ -380,7 +380,7 @@ unsafe extern fn fill(out &i64, v i64)      // &T  → ptr
 - Compiler memperkirakan pemakaian stack native terburuk dari `main` dan dari setiap `thread fn` lewat graf pemanggilan. Perkiraannya konservatif: frame dihitung dua kali ukuran variabel, dan komponen rekursif dikalikan `N`. Program ditolak jika hasilnya melebihi 896 KiB.
 
 **Tooling.**
-- `treelang check --panic-report` mendaftar semua `abort(...)` eksplisit.
+- `forest check --panic-report` mendaftar semua `abort(...)` eksplisit.
 - `editors/vscode/` berisi syntax highlighting untuk file `.tree`.
 
 ## 6j. Package dan import
@@ -420,7 +420,7 @@ fn main() {
 - JSON yang rusak ditolak dengan pesan berisi baris dan kolom.
 
 **Menjalankan.**
-- `treelang run myapp`, `treelang run .`, atau `treelang run myapp/main.tree`. Bila input berupa file, seluruh foldernya dimuat sebagai `package main`.
+- `forest run myapp`, `forest run .`, atau `forest run myapp/main.tree`. Bila input berupa file, seluruh foldernya dimuat sebagai `package main`.
 - `build` tanpa `-o` memberi nama executable sesuai nama folder.
 - Tanpa `forest.json` di folder input atau di atasnya, file tunggal dijalankan seperti biasa (mode skrip). Klausa `package` boleh tidak ditulis, tetapi `import` tidak tersedia.
 
@@ -495,7 +495,7 @@ fn process(path []u8) i64 {
 - Variabel pemilik (`[..]T`) di dalam defer hanya boleh dibaca: tidak boleh di-assign, di-`push`, atau di-move. Nilai biasa boleh diubah.
 - Argumen `defer f(args)` tidak boleh berupa `[..]T`, slice, atau referensi ke variabel scope dalam. Pakai `defer { ... }` untuk itu.
 - Fungsi berisi `recover` tidak boleh mengembalikan tipe yang memuat `Chan`/`Task`, karena nilai nolnya tidak bisa dipakai.
-- `treelang check --panic-report` mencantumkan setiap `panic(...)` dan `abort(...)`.
+- `forest check --panic-report` mencantumkan setiap `panic(...)` dan `abort(...)`.
 
 **Biaya.**
 - Program yang sama sekali tidak memakai `defer`/`recover` memakai **mode fatal**: `panic` langsung menghentikan program/goroutine, dan IR-nya sama dengan sebelum fitur ini ada.
@@ -608,7 +608,7 @@ fn main() {
   3. frame layer + HPACK + flow control di thread I/O, dengan API `Ctx` yang tetap sama.
 - **Cara yang sudah bisa dipakai sekarang:** fasthttp dan Fiber juga hanya HTTP/1.1. Di produksi, HTTP/2 dan TLS biasanya ditangani reverse proxy (nginx/Caddy) di depan server HTTP/1.1, dan cara itu juga berlaku untuk tree-lang.
 
-**Test:** `python test/http_tests.py build/Release/treelang.exe` (dipanggil juga oleh `build.ps1 -Test` dengan `--quick`).
+**Test:** `python test/http_tests.py build/Release/forest.exe` (dipanggil juga oleh `build.ps1 -Test` dengan `--quick`).
 
 ## 7. Pembuktian keamanan
 Compiler melacak rentang setiap integer: variabel **dan** field (`p.x`, `a.b.c`).
@@ -629,4 +629,4 @@ Aturan lain:
 
 ## 9. Kompilasi
 `.tree` → lexer (penyisipan `;`) → parser → sema (tipe + bukti) → LLVM IR → `clang -O2` + `runtime/tl_runtime.c` → executable.
-File sementara ditulis ke `TREELANG_TMP`, atau ke folder `tmp` di samping `treelang.exe`.
+File sementara ditulis ke `FOREST_TMP`, atau ke folder `tmp` di samping `forest.exe`.

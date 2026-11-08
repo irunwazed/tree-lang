@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 3.20)
-project(treelang CXX)
+project(forest CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-option(TREELANG_ASAN "Build the compiler with AddressSanitizer" OFF)
+option(FOREST_ASAN "Build the compiler with AddressSanitizer" OFF)
 
-add_executable(treelang
+add_executable(forest
     src/main.cpp
     src/diag.cpp
     src/lexer.cpp
@@ -21,20 +21,22 @@ add_executable(treelang
 )
 
 if(MSVC)
-    target_compile_options(treelang PRIVATE /W4 /utf-8 /permissive- /wd4244 /wd4267)
-    target_compile_definitions(treelang PRIVATE _CRT_SECURE_NO_WARNINGS)
-    if(TREELANG_ASAN)
-        target_compile_options(treelang PRIVATE /fsanitize=address)
+    target_compile_options(forest PRIVATE /W4 /utf-8 /permissive- /wd4244 /wd4267)
+    target_compile_definitions(forest PRIVATE _CRT_SECURE_NO_WARNINGS)
+    if(FOREST_ASAN)
+        target_compile_options(forest PRIVATE /fsanitize=address)
     endif()
 else()
-    target_compile_options(treelang PRIVATE -Wall -Wextra)
-    if(TREELANG_ASAN)
-        target_compile_options(treelang PRIVATE -fsanitize=address)
-        target_link_options(treelang PRIVATE -fsanitize=address)
+    target_compile_options(forest PRIVATE -Wall -Wextra)
+    if(FOREST_ASAN)
+        target_compile_options(forest PRIVATE -fsanitize=address)
+        target_link_options(forest PRIVATE -fsanitize=address)
     endif()
 endif()
 
-# Salin runtime di samping executable agar compiler bisa menemukannya.
-add_custom_command(TARGET treelang POST_BUILD
+# Salin runtime dan library standar di samping executable agar compiler bisa menemukannya.
+add_custom_command(TARGET forest POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_SOURCE_DIR}/runtime $<TARGET_FILE_DIR:treelang>/runtime)
+            ${CMAKE_SOURCE_DIR}/runtime $<TARGET_FILE_DIR:forest>/runtime
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_SOURCE_DIR}/stdlib $<TARGET_FILE_DIR:forest>/stdlib)
