@@ -505,6 +505,111 @@ fn process(path []u8) i64 {
   - fungsi tanpa defer tidak membayar apa pun selain itu.
 - Implementasinya memakai ulang mesin `return e from f`: panic adalah id unwind khusus. Setiap frame membebaskan miliknya sendiri, jadi tidak ada `longjmp` yang melewati region hidup.
 
+## 6l. Referensi fungsi `func(A) R`
+
+```
+fn double(x i64) i64 { return x *| 2 }
+type Route struct { path [..]u8, h func(&Ctx) }   // boleh disimpan di struct / [..]T / channel
+h := double                                       // nama fungsi → nilai func(i64) i64
+print(h(21))                                      // panggilan tidak langsung
+var maybe func(&Ctx)? = none                      // opsional bila bisa kosong
+```
+- `func(A) R` **hanya bisa diisi fungsi top-level bernama**. Fungsi generik, extern, dan method tidak bisa. Karena tidak ada closure, tidak ada variabel yang ditangkap: nilainya hanya alamat kode. Akibatnya nilai ini boleh disalin, disimpan, dan dikirim ke goroutine lain (sendable).
+- Bedanya dengan `fn(A) R`: `fn(A) R` adalah parameter yang tidak escape dan boleh diisi block. `func(A) R` boleh menerima `&T` dan `[]T` sebagai parameter, dengan aturan peminjaman yang sama seperti pemanggilan langsung.
+- **Tidak ada nilai nol.** `var h func()` tanpa nilai ditolak, begitu juga struct atau array berisi `func` yang di-zero-init. Gunakan `func(...)?` bila nilainya bisa kosong.
+- **Analisis tetap sound.** Panggilan tidak langsung dianggap memanggil **semua** fungsi yang pernah dipakai sebagai nilai dengan signature yang sama. Dengan itu, deteksi rekursi (`#max_depth`), perkiraan stack, `return ... from`, dan panic tetap benar.
+
+## 6m. `std/http`: server HTTP/1.1 ala fasthttp + Fiber
+
+```
+import "std/http"                                  // library standar: juga tanpa forest.json
+
+fn hello(c &http.Ctx) { c.SendString("Hello, World!") }
+fn user(c &http.Ctx) {
+    id := c.ParamInt("id") ?? -1                   // tanpa alokasi
+    name := c.Query("name")                         // [..]u8 (salinan)
+    msg := str("user ", id, " ", name)
+    c.Send(msg)
+}
+fn auth(c &http.Ctx) bool {                         // middleware: false = berhenti
+    if c.HeaderIs("X-Token", "secret") { return true }
+    c.Status(401)
+    c.SendString("unauthorized")
+    return false
+}
+fn main() {
+    var cfg = http.Default()                        // Workers 64, MaxBody 4 MiB, timeout, Queue
+    app := http.New(cfg)
+    app.After(http.Logger)                          // "GET /users/7 200 85us"
+    app.Get("/", hello)
+    app.Get("/users/:id", user)                     // juga :name? (opsional) dan * (sisa path)
+    api := app.Group("/api")
+    api.Use(auth)
+    api.Post("/items", create_item)
+    app.Static("/static", "./public")
+    app.Listen(":3000")
+}
+```
+
+**Arsitektur (model fasthttp).**
+- **Thread I/O** (C, `stdlib/http/http.c`): satu thread dengan socket non-blocking dan `poll`. Parser HTTP/1.1-nya inkremental: request line, header, dan parameter berupa *span* ke buffer koneksi, jadi tidak ada alokasi per request.
+- **Goroutine worker** (`Config.Workers`): mengambil request lewat channel runtime, menjalankan middleware → handler → `After`, lalu menyerahkan respons kembali ke thread I/O.
+  - Worker tidak pernah terblokir di syscall jaringan.
+  - Bila worker kewalahan, thread I/O berhenti membaca socket (backpressure).
+- Selama sebuah request dipegang worker, thread I/O tidak menyentuh koneksi itu. Karena itu span tetap valid tanpa kunci.
+
+**Router.**
+- Trie per segmen: statis > `:param` > `:param?` > `*`.
+- Path dikembalikan dalam bentuk ter-decode (`%xx`), dan `/` di akhir diabaikan.
+- Path yang ada tetapi method-nya tidak cocok → **405 + `Allow`**. Path yang tidak ada → **404**. `HEAD` otomatis dilayani oleh handler `GET`.
+- `Use` berlaku untuk route di bawah prefix grup yang didaftarkan **setelahnya**, sama seperti urutan di Fiber. Untuk 404/405, hanya middleware global yang dijalankan.
+
+**Protokol.**
+- Keep-alive (HTTP/1.1 default, HTTP/1.0 dengan `Connection: keep-alive`), pipelining dengan urutan respons terjaga, body `Content-Length` atau `chunked`, `Expect: 100-continue`.
+- `Date`, `Server`, dan `Content-Length` diisi otomatis. Header respons yang berisi CR/LF ditolak, untuk mencegah header injection.
+- Error protokol dijawab langsung oleh thread I/O, lalu koneksi ditutup:
+
+| Kondisi | Status |
+|---|---|
+| request rusak, `%xx` tidak valid, `Content-Length` bersamaan dengan `chunked` | 400 |
+| body > `MaxBody` | 413 |
+| header > 8 KiB atau > 100 header | 431 |
+| method tidak dikenal | 501 |
+| versi HTTP lain | 505 |
+
+**Keandalan.**
+- `panic` di handler menjadi **500**, dan worker serta koneksinya tetap hidup.
+- `abort` mematikan worker. Supervisor menggantinya, dan koneksi request itu ditutup setelah `HandlerTimeoutMs`.
+- Koneksi yang diam lebih lama dari `ReadTimeoutMs` ditutup.
+- Penyajian file statis menolak `..`, `\`, dan `:`. Isinya: `Content-Type` menurut ekstensi, `Last-Modified` + 304, dan `index.html` untuk folder.
+
+**Ctx.**
+- **Request:** `Method()`, `MethodName()`, `Path()`, `PathIs(p)`, `Param(n)`, `ParamInt(n)`, `Query(n)`, `QueryInt(n)`, `HasQuery(n)`, `Get(header)`, `HeaderIs(h, v)`, `Body()`, `BodyLen()`.
+- **Respons:** `Status(n)`, `StatusCode()`, `Set(k, v)`, `Type("json"|"html"|...)`, `Send(b)`, `SendString(s)`, `Write(b)` (menambah body), `JSON(body)`, `SendStatus(n)`, `Redirect(url, code)`, `ElapsedUs()`.
+
+**Perbedaan dari Fiber.** Semuanya karena tree-lang tidak punya closure, dan slice tidak bisa dikembalikan:
+- handler adalah fungsi bernama, bukan fungsi anonim;
+- middleware mengembalikan `bool`, bukan memanggil `c.Next()`. `c.Next()` akan membentuk rekursi lewat `func` yang mewajibkan `#max_depth` di setiap handler. Untuk pascaproses ada `After`;
+- `Param`, `Query`, `Body`, dan `Get` mengembalikan salinan `[..]u8`. Untuk jalur cepat ada versi tanpa alokasi (`ParamInt`, `QueryInt`, `HeaderIs`, `PathIs`);
+- `Group` mengembalikan nilai: `api := app.Group("/api")`.
+
+**Batas saat ini.**
+- HTTP/1.1 saja, tanpa TLS.
+- Satu server yang aktif `Listen` per proses.
+- Belum ada client HTTP.
+- Netpoller umum untuk goroutine belum ada. Yang ada baru thread I/O khusus http.
+
+**HTTP/2 (milestone berikutnya).**
+- **HTTP/2 vs HTTP/1.1:** HTTP/1.1 berbasis teks, dengan satu request aktif per koneksi. HTTP/2 memakai *frame* biner dan *multiplexing*: banyak stream (request) berjalan paralel dalam satu koneksi TCP. Header-nya dikompresi dengan HPACK, ada flow control per stream, dan stream bisa diberi prioritas.
+- **TLS:** browser hanya memakai HTTP/2 lewat TLS (`h2`, dinegosiasikan dengan ALPN), sedangkan `h2c` (tanpa TLS) dipakai antar-server, misalnya gRPC atau di belakang proxy.
+- **Rencana:**
+  1. TLS (Schannel di Windows / OpenSSL);
+  2. ALPN;
+  3. frame layer + HPACK + flow control di thread I/O, dengan API `Ctx` yang tetap sama.
+- **Cara yang sudah bisa dipakai sekarang:** fasthttp dan Fiber juga hanya HTTP/1.1. Di produksi, HTTP/2 dan TLS biasanya ditangani reverse proxy (nginx/Caddy) di depan server HTTP/1.1, dan cara itu juga berlaku untuk tree-lang.
+
+**Test:** `python test/http_tests.py build/Release/treelang.exe` (dipanggil juga oleh `build.ps1 -Test` dengan `--quick`).
+
 ## 7. Pembuktian keamanan
 Compiler melacak rentang setiap integer: variabel **dan** field (`p.x`, `a.b.c`).
 - Fakta diambil dari literal, konstanta, nilai nol, literal struct, kondisi `if`/`for`/`&&`/`||`, dan rentang `for ... range`.

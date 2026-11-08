@@ -194,6 +194,7 @@ int main(int argc, char** argv) {
     }
     if (o.debug) o.optimize = false;
 
+    set_stdlib_dir(find_stdlib_dir(argv[0]));
     std::string ll;
     LoadedProgram lp;
     if (o.command == "check") return compile_to_ll(o, ll, false, lp) ? 0 : 1;

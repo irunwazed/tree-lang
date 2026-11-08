@@ -31,6 +31,13 @@ namespace {
 
 constexpr const char* kManifest = "forest.json";
 
+std::string& stdlib_dir() {
+    static std::string d;
+    return d;
+}
+
+bool is_std(const std::string& path) { return path == "std" || path.compare(0, 4, "std/") == 0; }
+
 bool read_text(const fs::path& p, std::string& out) {
     std::ifstream f(p, std::ios::binary);
     if (!f) return false;
@@ -464,6 +471,7 @@ private:
         auto f = std::make_unique<SourceFile>();
         f->path = show_path(p);
         f->pkg = pkg;
+        f->trusted = is_std(pkg);
         SourceFile* raw = f.get();
         lp_.files.push_back(std::move(f));
         return raw;
@@ -526,11 +534,7 @@ private:
         Program p = parse_file(f);
         if (!p.package_name.empty() && p.package_name != "main")
             d_.error(p.package_loc, "a single-file program is 'package main', found 'package " + p.package_name + "'");
-        if (!p.imports.empty())
-            d_.error(p.imports[0].loc, "imports need a module: no " + std::string(kManifest) + " found",
-                     "create forest.json with { \"module\": \"myapp\" } in the project root folder");
-        std::map<std::string, FileImport> none;
-        Rewriter(d_, none).run(p);
+        process_imports(p, "");
         merge(p, "");
         add_sidecar(file);
         return !d_.has_errors();
@@ -569,34 +573,46 @@ private:
                                                   "', found 'package " + p.package_name + "'",
                          pkg.empty() ? "all files next to the program belong to package main"
                                      : "one folder is one package; the package name is the folder name");
-            std::map<std::string, FileImport> imports;
-            for (auto& im : p.imports) {
-                std::string alias = im.alias.empty() ? last_segment(im.path) : im.alias;
-                if (!is_ident(alias)) {
-                    d_.error(im.loc, "cannot derive a package name from \"" + im.path + "\"",
-                             "give it a name: import name \"" + im.path + "\"");
-                    continue;
-                }
-                if (imports.count(alias)) {
-                    d_.error(im.loc, "'" + alias + "' is imported twice in this file",
-                             "use another name: import other \"" + im.path + "\"");
-                    continue;
-                }
-                if (!resolve_import(im, pkg)) continue;
-                imports[alias] = FileImport{im.path, im.loc, false};
-            }
-            Rewriter(d_, imports).run(p);
-            for (auto& [alias, im] : imports)
-                if (!im.used) d_.error(im.loc, "\"" + im.path + "\" imported and not used",
-                                       "remove the import, or use it as '" + alias + ".Name'");
+            process_imports(p, pkg);
             merge(p, pkg);
             add_sidecar(path);
         }
     }
 
+    // Import satu file: alias, muat package-nya, tulis ulang 'alias.Nama', lalu tolak yang tak terpakai.
+    void process_imports(Program& p, const std::string& pkg) {
+        std::map<std::string, FileImport> imports;
+        for (auto& im : p.imports) {
+            std::string alias = im.alias.empty() ? last_segment(im.path) : im.alias;
+            if (!is_ident(alias)) {
+                d_.error(im.loc, "cannot derive a package name from \"" + im.path + "\"",
+                         "give it a name: import name \"" + im.path + "\"");
+                continue;
+            }
+            if (imports.count(alias)) {
+                d_.error(im.loc, "'" + alias + "' is imported twice in this file",
+                         "use another name: import other \"" + im.path + "\"");
+                continue;
+            }
+            if (!resolve_import(im, pkg)) continue;
+            imports[alias] = FileImport{im.path, im.loc, false};
+        }
+        Rewriter(d_, imports).run(p);
+        for (auto& [alias, im] : imports)
+            if (!im.used) d_.error(im.loc, "\"" + im.path + "\" imported and not used",
+                                   "remove the import, or use it as '" + alias + ".Name'");
+    }
+
     // Path import → folder; dimuat bila belum (deteksi siklus lewat tumpukan import aktif).
     bool resolve_import(const ImportDecl& im, const std::string& from_pkg) {
         const std::string& path = im.path;
+        if (is_std(path)) return resolve_std(im);
+        if (module_.empty()) {
+            d_.error(im.loc, "imports need a module: no " + std::string(kManifest) + " found",
+                     "create forest.json with { \"module\": \"myapp\" } in the project root folder "
+                     "(only \"std/...\" can be imported without one)");
+            return false;
+        }
         if (path == module_) {
             d_.error(im.loc, "cannot import the main package \"" + path + "\"");
             return false;
@@ -656,6 +672,33 @@ private:
         return true;
     }
 
+    // import "std/<pkg>": library standar yang dibawa compiler
+    bool resolve_std(const ImportDecl& im) {
+        const std::string& path = im.path;
+        std::string rel = path.size() > 4 ? path.substr(4) : "";
+        std::error_code ec;
+        fs::path dir = fs::path(stdlib_dir()) / fs::path(rel);
+        if (rel.empty() || rel.find("..") != std::string::npos || stdlib_dir().empty() || !fs::is_directory(dir, ec)) {
+            d_.error(im.loc, "standard package \"" + path + "\" not found",
+                     stdlib_dir().empty() ? "the stdlib folder was not found next to treelang (set TREELANG_STDLIB)"
+                                          : "available packages are folders in " + show_path(stdlib_dir()));
+            return false;
+        }
+        auto st = state_.find(path);
+        if (st != state_.end() && st->second == 1) {
+            d_.error(im.loc, "import cycle through \"" + path + "\"");
+            return false;
+        }
+        if (st == state_.end()) {
+            state_[path] = 1;
+            stack_.push_back(path);
+            load_dir(dir, path, last_segment(path), im.loc);
+            stack_.pop_back();
+            state_[path] = 2;
+        }
+        return true;
+    }
+
     // Pindahkan deklarasi file ke program gabungan; package non-main → nama internal "<pkg>.Nama".
     void merge(Program& p, const std::string& pkg) {
         auto q = [&](std::string& n) {
@@ -699,6 +742,8 @@ public:
 };
 
 }  // namespace
+
+void set_stdlib_dir(const std::string& dir) { stdlib_dir() = dir; }
 
 bool load_program(const std::string& input, Diag& diag, Program& out, LoadedProgram& lp) {
     Loader l(diag, out, lp);

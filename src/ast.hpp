@@ -26,6 +26,7 @@ struct TypeExpr {
     std::vector<TypeExpr> fn_params;  // Fn: fn(A, B) R
     std::vector<TypeExpr> targs;      // Name: Pool[T], Handle[T], Link[T]
     std::shared_ptr<TypeExpr> fn_ret; // Fn: null = tanpa hasil
+    bool func_ref = false;            // Fn: 'func(...) R' (referensi fungsi yang bisa disimpan)
     std::string str() const {
         switch (kind) {
             case TypeExprKind::Name:
@@ -36,7 +37,7 @@ struct TypeExpr {
                 }
                 return name;
             case TypeExprKind::Fn: {
-                std::string s = "fn(";
+                std::string s = func_ref ? "func(" : "fn(";
                 for (size_t i = 0; i < fn_params.size(); i++) s += (i ? ", " : "") + fn_params[i].str();
                 return s + ")" + (fn_ret ? " " + fn_ret->str() : "");
             }

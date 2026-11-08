@@ -17,6 +17,7 @@ struct SourceFile {
     std::string text;
     std::vector<size_t> line_starts;
     std::string pkg;  // import path package pemilik file ("" = package main / prelude)
+    bool trusted = false;  // library standar (std/...): tidak masuk --unsafe-report / --panic-report
     void index_lines();
     std::string line_text(int line) const;
 };

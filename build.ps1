@@ -28,5 +28,8 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 if ($Test) {
     python test\run_tests.py build\Release\treelang.exe
-    exit $LASTEXITCODE
+    $rc = $LASTEXITCODE
+    python test\http_tests.py build\Release\treelang.exe --quick
+    if ($LASTEXITCODE -ne 0) { $rc = $LASTEXITCODE }
+    exit $rc
 }

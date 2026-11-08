@@ -277,6 +277,21 @@ private:
             expect(Tok::RParen);
             return optional_suffix(inner);
         }
+        if (at(Tok::Ident) && cur().text == "func" && peek().kind == Tok::LParen) {
+            // func(A, B) R : referensi ke fungsi bernama
+            next();
+            next();
+            te.kind = TypeExprKind::Fn;
+            te.func_ref = true;
+            skip_auto_semis();
+            while (!at(Tok::RParen) && !at(Tok::Eof)) {
+                te.fn_params.push_back(parse_type());
+                if (!accept(Tok::Comma)) break;
+            }
+            expect(Tok::RParen, "to close the function type");
+            if (starts_type()) te.fn_ret = std::make_shared<TypeExpr>(parse_type());
+            return optional_suffix(te);
+        }
         te.name = expect_ident("a type name");
         if (at(Tok::Dot) && peek().kind == Tok::Ident) {
             // tipe dari package lain: utils.Point

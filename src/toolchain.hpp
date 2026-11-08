@@ -9,6 +9,8 @@ int run_process(const std::vector<std::string>& args);
 
 std::string find_clang();
 std::string find_runtime_dir(const std::string& argv0);
+// Folder library standar (stdlib/): TREELANG_STDLIB, atau dicari naik dari lokasi treelang.exe.
+std::string find_stdlib_dir(const std::string& argv0);
 std::string temp_dir();
 std::string exe_suffix();
 

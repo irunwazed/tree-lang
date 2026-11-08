@@ -29,6 +29,7 @@ enum class TypeKind {
     Handle,  // Handle[T] : { indeks u32, generasi u32 } ke sebuah Pool[T]
     Link,    // Link[T]   : offset u32 bertipe, relatif terhadap awal array [..]T
     Thread,  // Task: hasil 'run f(...)', ditunggu dengan wait()
+    FuncRef, // func(A, B) R : referensi ke fungsi top-level bernama (tanpa capture): boleh disimpan & dikirim
     Chan,    // Chan[T]: handle channel (satu-satunya hal yang dibagi antar goroutine; disinkronkan runtime)
 };
 
@@ -68,6 +69,7 @@ public:
     static Type* enum_(EnumDecl* ed);
     static Type* optional(Type* elem);
     static Type* fn(const std::vector<Type*>& params, Type* ret);
+    static Type* funcref(const std::vector<Type*>& params, Type* ret);
     static Type* wrap(TypeKind k, Type* elem);  // Pool / Handle / Link
     static Type* thread_();
     static Type* i64() { return int_(64, true); }

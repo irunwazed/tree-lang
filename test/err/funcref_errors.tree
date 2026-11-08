@@ -1,0 +1,27 @@
+fn gen[T](x T) T { return x }
+unsafe extern fn tl_os_clock_ns() i64
+unsafe extern fn takes(f func(i64) i64)
+fn one(x i64) i64 { return x }
+fn rec(n i64) i64 {
+    h := rec
+    if n <= 0 { return 0 }
+    return h(n - 1)
+}
+type S struct {
+    h func(i64) i64
+}
+fn main() {
+    a := gen
+    b := tl_os_clock_ns
+    var c func(i64) bool = one
+    var d func(i64) i64
+    var s S
+    print(rec(3))
+}
+// error: a generic function cannot be used as a value
+// error: an extern function cannot be used as a value
+// error: expected func(i64) bool, found func(i64) i64
+// error: func(i64) i64 has no zero value: give 'd' a value
+// error: S has no zero value
+// error: 'rec' is recursive
+// error: type func(i64) i64 cannot be passed to C

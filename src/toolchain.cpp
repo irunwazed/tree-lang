@@ -131,6 +131,23 @@ std::string find_runtime_dir(const std::string& argv0) {
     return "";
 }
 
+std::string find_stdlib_dir(const std::string& argv0) {
+    if (const char* env = std::getenv("TREELANG_STDLIB")) return env;
+    std::error_code ec;
+    fs::path exe = fs::absolute(argv0, ec);
+#ifdef _WIN32
+    char buf[MAX_PATH];
+    DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
+    if (n > 0 && n < MAX_PATH) exe = buf;
+#endif
+    fs::path dir = exe.parent_path();
+    for (int up = 0; up < 4; up++) {
+        if (fs::is_directory(dir / "stdlib", ec)) return (dir / "stdlib").string();
+        dir = dir.parent_path();
+    }
+    return "";
+}
+
 // Folder kerja sementara: TREELANG_TMP, atau 'tmp' di samping treelang.exe.
 // (Tidak memakai %TEMP% agar tidak membebani drive sistem.)
 std::string temp_dir() {

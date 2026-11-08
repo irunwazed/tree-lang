@@ -57,7 +57,7 @@
         },
         {
           "name": "keyword.other.tree-lang",
-          "match": "\\b(fn|var|const|type|struct|enum|import|package|thread|unsafe|extern|some)\\b"
+          "match": "\\b(fn|func|var|const|type|struct|enum|import|package|thread|unsafe|extern|some)\\b"
         },
         { "name": "keyword.operator.cast.tree-lang", "match": "\\bas[!%|?]?" },
         { "name": "constant.language.tree-lang", "match": "\\b(true|false|none|it)\\b" }

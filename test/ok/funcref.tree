@@ -1,0 +1,60 @@
+// func(A) R: referensi ke fungsi bernama (tanpa capture) — boleh disimpan, disalin, dikirim ke goroutine.
+type Ctx struct {
+    hits i64
+}
+
+fn home(c &Ctx) { if c.hits < 1000 { c.hits++ } }
+fn about(c &Ctx) { if c.hits < 1000 { c.hits = c.hits + 10 } }
+fn double(x i64) i64 { return x *| 2 }
+fn boom(x i64) i64 {
+    if x > 5 { panic("too big") }
+    return x
+}
+
+type Route struct {
+    id i64
+    h func(&Ctx)
+}
+
+fn apply(f func(i64) i64, x i64) i64 { return f(x) }
+
+fn worker(jobs Chan[func(i64) i64], out Chan[i64]) {
+    for f := range jobs { _ = out <- f(21) }
+}
+
+fn safe(f func(i64) i64, x i64) i64 {
+    defer {
+        if some m := recover() { print("recovered: ", m) }
+    }
+    return f(x)
+}
+
+fn main() {
+    var routes [..]Route
+    routes.push(Route{1, home})
+    routes.push(Route{2, about})
+    var c Ctx
+    for _, r := range routes {
+        h := r.h
+        h(&c)
+    }
+    print(c.hits, " ", apply(double, 4))
+    jobs := chan[func(i64) i64](2)
+    out := chan[i64](2)
+    t := run worker(jobs, out)
+    _ = jobs <- double
+    close(jobs)
+    print(<-out, " ", wait(t))
+    var maybe func(&Ctx)? = none
+    if some m := maybe { m(&c) } else { print("none") }
+    maybe = home
+    if some m := maybe { m(&c) }
+    print(c.hits)
+    print(safe(boom, 3), " ", safe(boom, 9))
+}
+// expect: 11 8
+// expect: some(42) true
+// expect: none
+// expect: 12
+// expect: recovered: too big
+// expect: 3 0

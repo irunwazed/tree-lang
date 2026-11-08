@@ -1,0 +1,39 @@
+// treelang run samples/http_hello/main.tree   lalu buka http://localhost:3000/
+import "std/http"
+
+fn hello(c &http.Ctx) { c.SendString("Hello, World!") }
+
+fn get_user(c &http.Ctx) {
+    id := c.ParamInt("id") ?? -1
+    name := c.Query("name")
+    body := str("{\"id\":", id, ",\"name\":\"", name, "\"}")
+    c.JSON(body)
+}
+
+fn create_item(c &http.Ctx) {
+    data := c.Body()
+    c.Status(201)
+    c.Write("created ")
+    c.Write(data)
+}
+
+fn auth(c &http.Ctx) bool {
+    if c.HeaderIs("X-Token", "secret") { return true }
+    c.Status(401)
+    c.SendString("unauthorized")
+    return false
+}
+
+fn crash(c &http.Ctx) { panic("boom") }   // → 500, server tetap hidup
+
+fn main() {
+    app := http.New(http.Default())
+    app.After(http.Logger)
+    app.Get("/", hello)
+    app.Get("/users/:id", get_user)
+    app.Get("/crash", crash)
+    api := app.Group("/api")
+    api.Use(auth)
+    api.Post("/items", create_item)
+    app.Listen(":3000")
+}

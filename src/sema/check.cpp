@@ -322,7 +322,7 @@ BlockPtr clone_block(const Block& b) {
     return c;
 }
 
-bool te_is_fn(const TypeExpr& te) { return te.kind == TypeExprKind::Fn; }
+bool te_is_fn(const TypeExpr& te) { return te.kind == TypeExprKind::Fn && !te.func_ref; }  // func(...) = nilai biasa
 
 // Apakah ekspresi tipe menyebut salah satu parameter tipe?
 bool te_mentions(const TypeExpr& te, const std::vector<std::string>& tps) {
@@ -393,7 +393,7 @@ public:
             std::vector<Item> u, pz;
             for (auto& [c, t] : unsafe_calls_) u.push_back(t);
             for (auto& f : prog_.fns)
-                if (f->is_extern && !in_prelude(f->loc))
+                if (f->is_extern && !trusted(f->loc))
                     u.push_back({f->loc, loc_text(f->loc) + ": unsafe extern fn '" + f->name + "' (C symbol)"});
             for (auto& [c, t] : panics_) pz.push_back(t);
             std::sort(u.begin(), u.end(), by_pos);
@@ -450,6 +450,23 @@ private:
         switch (te.kind) {
             case TypeExprKind::Fn: {
                 std::vector<Type*> ps;
+                if (te.func_ref) {
+                    // func(A) R: parameter seperti fungsi biasa (boleh &T dan []T)
+                    for (auto& pt : te.fn_params) {
+                        Type* t = resolve_type(pt);
+                        if (t->kind == TypeKind::Fn) {
+                            diag_.error(pt.loc, "a func type cannot take block parameters");
+                            t = Types::error();
+                        }
+                        ps.push_back(t);
+                    }
+                    Type* r = te.fn_ret ? resolve_type(*te.fn_ret) : Types::void_();
+                    if (r->kind == TypeKind::Ref || r->kind == TypeKind::Slice || r->kind == TypeKind::Fn) {
+                        diag_.error(te.fn_ret->loc, "a function cannot return " + type_name(r));
+                        r = Types::error();
+                    }
+                    return Types::funcref(ps, r);
+                }
                 for (auto& pt : te.fn_params) {
                     Type* t = resolve_type(pt);
                     if (t->kind == TypeKind::Ref || t->kind == TypeKind::Fn || t->kind == TypeKind::Slice) {
@@ -757,6 +774,7 @@ private:
     static bool sendable(const Type* t) {
         switch (t->kind) {
             case TypeKind::Chan: return true;  // handle channel: disinkronkan runtime
+            case TypeKind::FuncRef: return true;  // pointer kode tanpa data
             case TypeKind::Int:
             case TypeKind::Float:
             case TypeKind::Bool:
@@ -787,9 +805,11 @@ private:
 
     void resolve_extern(FnDecl& fn) {
         if (!fns_.emplace(fn.name, &fn).second) diag_.error(fn.loc, "duplicate function '" + fn.name + "'");
+        // library standar boleh menitipkan func ke C (C hanya mengembalikan pointer yang ia terima)
+        bool fref_ok = trusted(fn.loc);
         for (auto& p : fn.params) {
             Type* t = resolve_type(p.type);
-            if (!t->is_error() && !c_param_ok(t))
+            if (!t->is_error() && !c_param_ok(t) && !(fref_ok && t->kind == TypeKind::FuncRef))
                 diag_.error(p.type.loc, "type " + type_name(t) + " cannot be passed to C",
                             "use numbers, bool, '[]T' (pointer + length), '&T' (pointer) with plain-data T");
             fn.param_types.push_back(t);
@@ -801,7 +821,7 @@ private:
         fn.ret = Types::void_();
         if (!fn.ret_types.empty()) {
             Type* r = resolve_type(fn.ret_types[0]);
-            if (!r->is_error() && !(r->is_numeric() || r == Types::bool_()))
+            if (!r->is_error() && !(r->is_numeric() || r == Types::bool_() || (fref_ok && r->kind == TypeKind::FuncRef)))
                 diag_.error(fn.ret_types[0].loc, "an extern function can only return a number or bool, not " +
                                                      type_name(r));
             fn.ret = r;
@@ -809,6 +829,8 @@ private:
     }
 
     bool in_prelude(Loc l) const { return l.file && l.file->path == "<prelude>"; }
+    // prelude atau library standar: dipercaya, tidak masuk --unsafe-report / --panic-report
+    bool trusted(Loc l) const { return in_prelude(l) || (l.file && l.file->trusted); }
 
     // ---------------- defer / panic / recover ----------------
     bool pm_expr(const Expr& e) {
@@ -842,6 +864,7 @@ private:
     static bool has_handle(const Type* t) {
         switch (t->kind) {
             case TypeKind::Chan:
+            case TypeKind::FuncRef:
             case TypeKind::Thread: return true;
             case TypeKind::Array:
             case TypeKind::Optional:
@@ -855,6 +878,23 @@ private:
                     if (f.type && has_handle(f.type)) return true;
                 return false;
             default: return false;
+        }
+    }
+
+    // tipe yang punya nilai nol yang bisa dipakai (func tidak: tidak ada fungsi 'kosong')
+    static bool has_zero(const Type* t) {
+        switch (t->kind) {
+            case TypeKind::FuncRef: return false;
+            case TypeKind::Array: return has_zero(t->elem);
+            case TypeKind::Struct:
+                for (auto& f : t->sd->fields)
+                    if (f.type && !has_zero(f.type)) return false;
+                return true;
+            case TypeKind::Tuple:
+                for (auto* e : t->elems)
+                    if (!has_zero(e)) return false;
+                return true;
+            default: return true;  // Optional (none), Dyn (kosong), angka, ...
         }
     }
 
@@ -965,7 +1005,7 @@ private:
 
     Type* check_panic(Expr& e) {
         e.builtin = Builtin::Panic;
-        if (!in_prelude(e.loc)) panics_[&e] = {e.loc, loc_text(e.loc) + ": panic(...)"};
+        if (!trusted(e.loc)) panics_[&e] = {e.loc, loc_text(e.loc) + ": panic(...)"};
         if (e.args.size() != 1) {
             diag_.error(e.loc, "'panic' takes one message");
             for (auto& a : e.args) check_expr(*a, nullptr);
@@ -2048,7 +2088,7 @@ private:
                t->kind == TypeKind::Struct || t->kind == TypeKind::Array || t->kind == TypeKind::Dyn ||
                t->kind == TypeKind::Enum || t->kind == TypeKind::Optional || t->kind == TypeKind::Pool ||
                t->kind == TypeKind::Handle || t->kind == TypeKind::Link || t->kind == TypeKind::Thread ||
-               t->kind == TypeKind::Chan || t->is_error();
+               t->kind == TypeKind::Chan || t->kind == TypeKind::FuncRef || t->is_error();
     }
 
     // Ekspresi di posisi yang menerima kepemilikan (inisialisasi, assignment, return, '_ =').
@@ -2176,6 +2216,9 @@ private:
             env_.init.insert(v);
             assign_value(env_, Path{v, {}}, vt, *s.e1, range(*s.e1));
         } else if (s.zero_init) {
+            if (!has_zero(vt))
+                diag_.error(s.name_locs[0], type_name(vt) + " has no zero value: give '" + s.names[0] + "' a value",
+                            "e.g. 'var h = my_handler', or use an optional 'func(...)?'");
             env_.init.insert(v);
             record_zero(env_, Path{v, {}}, vt);
         }
@@ -2581,10 +2624,22 @@ private:
     Type* check_name(Expr& e) {
         VarInfo* v = lookup(e.str, e.loc);
         if (!v) {
-            if (named(fns_, e.str, e.loc))
-                diag_.error(e.loc, "'" + e.str + "' is a function; function values arrive in a later milestone");
-            else
+            if (FnDecl* f = named(fns_, e.str, e.loc)) {
+                // referensi ke fungsi bernama: tanpa capture, jadi aman disimpan dan dikirim
+                if (f->is_template || f->is_extern || f->is_thread || !f->ret) {
+                    diag_.error(e.loc, f->is_template ? "a generic function cannot be used as a value"
+                                       : f->is_extern ? "an extern function cannot be used as a value"
+                                                      : "'" + e.str + "' cannot be used as a value",
+                                "wrap it in a plain function: 'fn my_" + e.str + "(...) { ... }'");
+                    return Types::error();
+                }
+                e.fn = f;
+                address_taken_.insert(f);
+                return Types::funcref(f->param_types, f->ret);
+            }
+            {
                 diag_.error(e.loc, "unknown name '" + e.str + "'");
+            }
             return Types::error();
         }
         e.var = v;
@@ -3520,7 +3575,7 @@ private:
         if (!e.method_call && e.str == "recover" && !named(fns_, "recover", e.loc)) return check_recover(e);
         if (!e.method_call && (e.str == "print" || e.str == "abort")) {
             e.builtin = e.str == "print" ? Builtin::Print : Builtin::Abort;
-            if (e.builtin == Builtin::Abort && !in_prelude(e.loc)) panics_[&e] = {e.loc, loc_text(e.loc) + ": abort(...)"};
+            if (e.builtin == Builtin::Abort && !trusted(e.loc)) panics_[&e] = {e.loc, loc_text(e.loc) + ": abort(...)"};
             for (auto& a : e.args) {
                 Type* t = check_expr(*a, nullptr);
                 if (t->is_error()) continue;
@@ -3537,6 +3592,14 @@ private:
             // f(x) lewat parameter fungsi
             VarInfo* fv = lookup(e.str, e.loc);
             if (fv && fv->type->kind == TypeKind::Fn) return check_fn_param_call(e, fv);
+            if (fv && fv->type->kind == TypeKind::FuncRef) {
+                // h(c): panggilan lewat referensi fungsi
+                if (env_.moved.count(fv)) diag_.error(e.loc, "'" + fv->name + "' was moved into a channel");
+                if (!fv->is_const && !env_.dead && !env_.init.count(fv))
+                    diag_.error(e.loc, "'" + fv->name + "' may be used before it is set");
+                e.var = fv;
+                return check_call_args(e, fv->type->elems, fv->type->elem, fv->name);
+            }
         }
         if (!e.method_call && !named(fns_, e.str, e.loc) && (e.str == "to_bytes" || e.str == "from_bytes"))
             return check_bytes_builtin(e);
@@ -3588,7 +3651,7 @@ private:
                 return Types::error();
             }
         }
-        if (fn->is_extern && !in_prelude(e.loc))
+        if (fn->is_extern && !trusted(e.loc))
             unsafe_calls_[&e] = {e.loc, loc_text(e.loc) + ": call to unsafe extern fn '" + fn->name + "'"};
         if (fn->is_thread) {
             diag_.error(e.loc, "thread function '" + fn->name + "' is started with 'spawn " + fn->name + "(...)'");
@@ -3601,9 +3664,14 @@ private:
         }
         e.fn = fn;
         if (!fn->ret) return Types::error();
+        return check_call_args(e, fn->param_types, fn->ret, fn->name);
+    }
+
+    // Argumen panggilan (langsung atau lewat func): tipe, referensi '&', dan aturan anti-alias.
+    Type* check_call_args(Expr& e, const std::vector<Type*>& pts, Type* ret, const std::string& fname) {
         size_t skip = e.method_call ? 1 : 0;  // receiver sudah diperiksa
-        if (e.args.size() != fn->params.size()) {
-            diag_.error(e.loc, "'" + fn->name + "' expects " + std::to_string(fn->params.size() - skip) +
+        if (e.args.size() != pts.size()) {
+            diag_.error(e.loc, "'" + fname + "' expects " + std::to_string(pts.size() - skip) +
                                    " argument(s), found " + std::to_string(e.args.size() - skip));
         }
         struct Use {
@@ -3612,10 +3680,10 @@ private:
             std::string text;
         };
         std::vector<Use> muts, views;  // pinjaman '&' dan tampilan slice dalam panggilan ini
-        if (e.method_call && !fn->param_types.empty() && fn->param_types[0]->kind == TypeKind::Ref) {
+        if (e.method_call && !pts.empty() && pts[0]->kind == TypeKind::Ref) {
             Expr& recv = *e.args[0];
             if (!is_place(recv)) {
-                diag_.error(recv.loc, "method '" + fn->name + "' takes '&" + type_name(fn->param_types[0]->elem) +
+                diag_.error(recv.loc, "method '" + fname + "' takes '&" + type_name(pts[0]->elem) +
                                           "' and needs a variable, not a temporary value");
             } else {
                 recv.borrow = true;
@@ -3623,9 +3691,9 @@ private:
             }
         }
         for (size_t i = skip; i < e.args.size(); i++) {
-            Type* pt = i < fn->param_types.size() ? fn->param_types[i] : nullptr;
+            Type* pt = i < pts.size() ? pts[i] : nullptr;
             Expr& a = *e.args[i];
-            std::string which = "argument " + std::to_string(i + 1 - skip) + " of '" + fn->name + "'";
+            std::string which = "argument " + std::to_string(i + 1 - skip) + " of '" + fname + "'";
             if (pt && pt->kind == TypeKind::Fn) continue;  // sudah diperiksa saat instansiasi
             if (pt && pt->kind == TypeKind::Ref) {
                 Type* at = nullptr;
@@ -3678,11 +3746,11 @@ private:
                 for (auto& u : *list)
                     if (u.root && mods.count(u.root))
                         diag_.error(a->loc, "the block modifies '" + u.root->name + "', which is also passed to '" +
-                                                fn->name + "'",
+                                                fname + "'",
                                     "the function could be using it while the block changes it");
         }
         for (auto& m : muts) invalidate_root(m.root);  // fungsi mungkin telah mengubahnya
-        return fn->ret;
+        return ret;
     }
 
     // f(x) di mana f adalah parameter bertipe fungsi.
@@ -4092,6 +4160,10 @@ private:
                     if (owner->params[k].var == e.var && k < owner->bindings.size())
                         target = owner->bindings[k].block ? (const void*)owner->bindings[k].block
                                                           : (const void*)owner->bindings[k].fn;
+            } else if (e.var && e.var->type->kind == TypeKind::FuncRef) {
+                for (FnDecl* f : address_taken_)
+                    if (Types::funcref(f->param_types, f->ret) == e.var->type && idx.count(f))
+                        n.calls.push_back({&e, idx[f]});
             } else if (e.fn) {
                 target = e.fn;
             }
@@ -4185,6 +4257,8 @@ private:
         run();
         env_ = h;  // block bisa berjalan 0 kali atau lebih
         b.captures.assign(caps.begin(), caps.end());
+        // urutan tetap (bukan alamat pointer): IR yang sama untuk program yang sama
+        std::sort(b.captures.begin(), b.captures.end(), [](VarInfo* x, VarInfo* y) { return x->id < y->id; });
         for (VarInfo* c : b.captures)
             if (c->type->kind == TypeKind::Fn)
                 diag_.error(b.loc, "a block cannot use function parameters of the enclosing function yet");
@@ -4372,6 +4446,7 @@ private:
     std::set<Path> last_induct_;
     bool returning_ = false;
     bool panic_mode_ = false;
+    std::set<FnDecl*> address_taken_;  // fungsi yang dipakai sebagai nilai func
     bool in_defer_ = false;
     size_t defer_scope_base_ = 0;
     size_t defer_block_base_ = 0;

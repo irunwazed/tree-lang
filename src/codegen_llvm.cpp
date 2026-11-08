@@ -45,6 +45,7 @@ std::string llvm_type(const Type* t) {
         case TypeKind::Dyn: return "{ ptr, i64, i64 }";  // data, len, byte ter-commit
         case TypeKind::Slice: return "{ ptr, i64 }";     // data, len
         case TypeKind::Ref: return "ptr";
+        case TypeKind::FuncRef: return "ptr";  // alamat fungsi
         case TypeKind::Fn: return "ptr";  // env (variabel yang ditangkap block); fungsinya diketahui statis
         case TypeKind::Pool: return "{ { ptr, i64, i64 }, { ptr, i64, i64 }, { ptr, i64, i64 } }";  // data, gen, free
         case TypeKind::Handle: return "{ i32, i32 }";  // indeks, generasi
@@ -455,9 +456,10 @@ private:
             args += (i ? ", " : "") + x;
         }
         std::string call = "call " + c_type(fn->ret) + " " + fn_symbol(fn) + "(" + args + ")";
-        // runtime yang mengisi [..]u8 (file, stdin, argumen, env) bisa kehabisan memori → panic
-        const std::string& cn = fn->c_name.empty() ? fn->name : fn->c_name;
-        bool allocs = cn == "tl_os_read_file" || cn == "tl_os_read_line" || cn == "tl_os_arg" || cn == "tl_os_env";
+        // C yang mengisi '&[..]T' (file, stdin, argumen, env, http, ...) bisa kehabisan memori → panic
+        bool allocs = false;
+        for (Type* pt : fn->param_types)
+            if (pt->kind == TypeKind::Ref && pt->elem->kind == TypeKind::Dyn) allocs = true;
         if (fn->ret == Types::void_()) {
             line(call);
             if (allocs) panic_guard();
@@ -1434,6 +1436,7 @@ private:
                 return {emit("load { ptr, i64, i64 }, ptr " + slot), e.type};
             }
             case ExprKind::Name: {
+                if (!e.var && e.fn) return {fn_symbol(e.fn), e.type};  // fungsi sebagai nilai func
                 const VarInfo* v = e.var;
                 if (v->is_const) {
                     if (v->type->is_int()) return {int_const(v->type, v->const_neg, v->const_mag), v->type};
@@ -2596,9 +2599,11 @@ private:
         }
         if (e.var && e.var->type->kind == TypeKind::Fn) return emit_fn_param_call(e);
         if (e.fn && e.fn->is_extern) return emit_extern_call(e);
+        bool indirect = e.var && e.var->type->kind == TypeKind::FuncRef;
+        const std::vector<Type*>& pts = indirect ? e.var->type->elems : e.fn->param_types;
         std::string args;
         for (size_t i = 0; i < e.args.size(); i++) {
-            Type* pt = e.fn->param_types[i];
+            Type* pt = pts[i];
             Val v;
             if (pt->kind == TypeKind::Fn) {
                 v = {fn_arg_env(*e.args[i]), pt};
@@ -2616,8 +2621,9 @@ private:
             if (i) args += ", ";
             args += llvm_type(v.type) + " " + v.op;
         }
-        Type* ret = e.fn->ret;
-        std::string call = "call " + llvm_type(ret) + " " + fn_symbol(e.fn) + "(" + args + ")";
+        Type* ret = indirect ? e.var->type->elem : e.fn->ret;
+        std::string callee = indirect ? emit("load ptr, ptr " + slot_of(e.var)) : fn_symbol(e.fn);
+        std::string call = "call " + llvm_type(ret) + " " + callee + "(" + args + ")";
         if (ret == Types::void_()) {
             line(call);
             if (e.may_unwind) unwind_check();

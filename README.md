@@ -72,4 +72,6 @@ docs/spec.md                    spesifikasi bahasa (termasuk array & model memor
 - [x] **M9** `unsafe extern fn` (FFI C + sidecar `.c`), stdlib OS (file/env/arg/waktu/`str`/`parse_int`), `#max_depth(N)` + analisis stack native, `--unsafe-report`/`--panic-report`, highlighting VS Code
 - [x] **Package** ala Go: `forest.json` (`{"module": "myapp"}`), satu folder = satu package, `import "myapp/geo"` / alias / `import ( ... )`, ekspor huruf besar; import tak terpakai, siklik, dan shadowing ditolak saat compile
 - [x] **defer / panic / recover** ala Go: `defer f(x)` / `defer { ... }` (LIFO, tidak di loop), `panic("msg")`, `if some msg := recover()` di defer; `#max_depth` dan kehabisan memori menjadi panic yang bisa di-recover; `abort` tetap fatal; tanpa biaya bila tidak dipakai
+- [x] **`func(A) R`**: referensi fungsi bernama (bisa disimpan / dikirim ke goroutine; panggilan tidak langsung dianalisis secara konservatif)
+- [x] **`std/http`** ala fasthttp + Fiber: thread I/O + goroutine worker, router `:param` / `:param?` / `*`, grup, middleware, `After`/Logger, static files, keep-alive + pipelining, chunked, panic → 500 (lihat `samples/http_hello/`). HTTP/2 menyusul
 - [ ] M10 benchmark vs C dan Rust

@@ -299,6 +299,7 @@ static struct {
     tl_cond work;
     tl_g *head, *tail;
     int workers, idle, live;
+    int ext; /* sumber kejadian di luar goroutine (mis. thread I/O http): selama > 0 bukan deadlock */
     struct {
         tl_g* g;
         uint64_t seq;
@@ -442,7 +443,7 @@ static void worker_loop(void) {
                 break;
             }
             tl_s.idle++;
-            if (tl_s.idle == tl_s.workers && tl_s.ntimers == 0 && tl_s.live > 0) {
+            if (tl_s.idle == tl_s.workers && tl_s.ntimers == 0 && tl_s.live > 0 && tl_s.ext == 0) {
                 fflush(stdout);
                 fprintf(stderr, "abort: deadlock: all %d goroutine(s) are blocked forever "
                                 "(waiting on channels or tasks that nothing will ever complete)\n", tl_s.live);
@@ -879,6 +880,23 @@ int32_t tl_chan_send(int64_t h, const void* data) {
     q_push(&c->sendq, &w);
     g_park(&c->lock);
     return me->wake_ok;
+}
+
+/* Kirim tanpa menunggu dari thread OS mana pun (bukan goroutine), mis. thread I/O http.
+   1 terkirim, 0 penuh (coba lagi nanti), -1 tertutup. */
+int32_t tl_chan_offer(int64_t h, const void* data) {
+    tl_chan* c = chan_lock(h);
+    if (!c) return -1;
+    int r = try_send(c, data);
+    lock_off(&c->lock);
+    return r;
+}
+
+/* Thread di luar scheduler yang akan membangunkan goroutine (+1 / -1). */
+void tl_ext_hold(int32_t delta) {
+    lock_on(&tl_s.lock);
+    tl_s.ext += delta;
+    lock_off(&tl_s.lock);
 }
 
 /* <-ch : 1 diterima, 0 tertutup & kosong */

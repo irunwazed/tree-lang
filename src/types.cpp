@@ -131,6 +131,17 @@ Type* Types::fn(const std::vector<Type*>& params, Type* ret) {
     return t;
 }
 
+Type* Types::funcref(const std::vector<Type*>& params, Type* ret) {
+    static std::vector<Type*> cache;
+    for (Type* t : cache)
+        if (t->elems == params && t->elem == ret) return t;
+    Type* t = make(TypeKind::FuncRef);
+    t->elems = params;
+    t->elem = ret;
+    cache.push_back(t);
+    return t;
+}
+
 Type* Types::wrap(TypeKind k, Type* elem) {
     static std::vector<Type*> cache;
     for (Type* t : cache)
@@ -181,6 +192,7 @@ uint64_t type_size(const Type* t) {
         case TypeKind::Slice: return 16;
         case TypeKind::Ref: return 8;
         case TypeKind::Fn: return 8;
+        case TypeKind::FuncRef: return 8;
         case TypeKind::Pool: return 72;
         case TypeKind::Handle: return 8;
         case TypeKind::Link: return 4;
@@ -251,6 +263,11 @@ std::string type_name(const Type* t) {
         case TypeKind::Link: return "Link[" + type_name(t->elem) + "]";
         case TypeKind::Thread: return "Task";
         case TypeKind::Chan: return "Chan[" + type_name(t->elem) + "]";
+        case TypeKind::FuncRef: {
+            std::string s = "func(";
+            for (size_t i = 0; i < t->elems.size(); i++) s += (i ? ", " : "") + type_name(t->elems[i]);
+            return s + ")" + (t->elem && t->elem != Types::void_() ? " " + type_name(t->elem) : "");
+        }
         case TypeKind::Fn: {
             std::string s = "fn(";
             for (size_t i = 0; i < t->elems.size(); i++) s += (i ? ", " : "") + type_name(t->elems[i]);

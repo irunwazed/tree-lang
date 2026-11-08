@@ -1,0 +1,104 @@
+// Server uji untuk test/http_tests.py (dijalankan dengan cwd = test/http).
+import "std/http"
+
+fn hello(c &http.Ctx) { c.SendString("Hello, World!") }
+
+fn user(c &http.Ctx) {
+    id := c.ParamInt("id") ?? -1
+    name := c.Query("name")
+    msg := str("user ", id, " ", name)
+    c.Send(msg)
+}
+
+fn post_user(c &http.Ctx) {
+    body := c.Body()
+    c.Status(201)
+    c.Set("X-Echo-Len", "yes")
+    c.Type("json")
+    c.Write("{\"got\":")
+    n := str(len(body))
+    c.Write(n)
+    c.Write(",\"body\":\"")
+    c.Write(body)
+    c.Write("\"}")
+}
+
+fn optional(c &http.Ctx) {
+    v := c.Param("name")
+    if len(v) == 0 {
+        c.SendString("anonymous")
+        return
+    }
+    msg := str("hi ", v)
+    c.Send(msg)
+}
+
+fn files(c &http.Ctx) {
+    rest := c.Param("*")
+    msg := str("file:", rest)
+    c.Send(msg)
+}
+
+fn header_echo(c &http.Ctx) {
+    ua := c.Get("x-test")
+    c.Set("X-Got", ua)
+    c.SendString("ok")
+}
+
+fn crash(c &http.Ctx) {
+    c.SendString("half")
+    panic("handler exploded")
+}
+
+fn die(c &http.Ctx) { abort("worker killed") }
+
+fn moved(c &http.Ctx) { c.Redirect("/", 301) }
+
+fn method_any(c &http.Ctx) {
+    m := c.MethodName()
+    c.Send(m)
+}
+
+fn auth(c &http.Ctx) bool {
+    if c.HeaderIs("X-Token", "secret") { return true }
+    c.Status(401)
+    c.SendString("unauthorized")
+    return false
+}
+
+fn secret(c &http.Ctx) { c.SendString("secret data") }
+
+fn stamp(c &http.Ctx) { c.Set("X-Served-By", "tree-lang") }
+
+fn big(c &http.Ctx) {
+    var out [..]u8
+    for _i := range 100000 { out.push(120) }
+    c.Send(out)
+}
+
+fn main() {
+    var cfg = http.Default()
+    cfg.Workers = 8
+    cfg.MaxBody = 1024
+    cfg.HandlerTimeoutMs = 1500
+    app := http.New(cfg)
+    app.After(stamp)
+    app.Get("/", hello)
+    app.Get("/users/:id", user)
+    app.Post("/users", post_user)
+    app.Get("/opt/:name?", optional)
+    app.Get("/files/*", files)
+    app.Get("/headers", header_echo)
+    app.Get("/crash", crash)
+    app.Get("/die", die)
+    app.Get("/old", moved)
+    app.All("/any", method_any)
+    app.Get("/big", big)
+    api := app.Group("/api")
+    api.Use(auth)
+    api.Get("/secret", secret)
+    v1 := api.Group("/v1")
+    v1.Get("/secret", secret)
+    app.Static("/static", "./public")
+    app.Listen("127.0.0.1:0")
+}

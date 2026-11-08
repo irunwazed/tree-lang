@@ -1,0 +1,377 @@
+// std/http — server HTTP/1.1 ala fasthttp + router ala Fiber.
+//
+//   import "std/http"
+//
+//   fn hello(c &http.Ctx) { c.SendString("Hello, World!") }
+//
+//   fn main() {
+//       app := http.New(http.Default())
+//       app.Get("/", hello)
+//       app.Listen(":3000")
+//   }
+//
+// Thread I/O (http.c) membaca & mem-parse request; goroutine worker menjalankan handler.
+// Handler adalah fungsi bernama 'func(&Ctx)'; middleware 'func(&Ctx) bool' (false = berhenti).
+package http
+
+unsafe extern fn tl_http_new(max_body, read_timeout_ms, handler_timeout_ms i64) i64
+unsafe extern fn tl_http_group(srv, parent i64, prefix []u8) i64
+unsafe extern fn tl_http_route(srv, group, method i64, path []u8, h func(&Ctx)) i64
+unsafe extern fn tl_http_use(srv, group i64, prefix []u8, mw func(&Ctx) bool, after i64) i64
+unsafe extern fn tl_http_after(srv, group i64, prefix []u8, h func(&Ctx), after i64) i64
+unsafe extern fn tl_http_static(srv, group i64, prefix []u8, dir []u8) i64
+unsafe extern fn tl_http_listen(srv i64, addr []u8, queue i64) bool
+unsafe extern fn tl_http_port(srv i64) i64
+unsafe extern fn tl_http_wait(srv i64)
+unsafe extern fn tl_http_next(srv i64) i64
+unsafe extern fn tl_http_kind(req i64) i64
+unsafe extern fn tl_http_handler(req i64) func(&Ctx)
+unsafe extern fn tl_http_hook_count(req, after i64) i64
+unsafe extern fn tl_http_hook(req, after, k i64) func(&Ctx) bool
+unsafe extern fn tl_http_after_hook(req, after, k i64) func(&Ctx)
+unsafe extern fn tl_http_default(req i64)
+unsafe extern fn tl_http_method(req i64) i64
+unsafe extern fn tl_http_path(req i64, out &[..]u8) bool
+unsafe extern fn tl_http_path_is(req i64, p []u8) bool
+unsafe extern fn tl_http_param(req i64, name []u8, out &[..]u8) bool
+unsafe extern fn tl_http_param_int(req i64, name []u8, out &i64) bool
+unsafe extern fn tl_http_query(req i64, name []u8, out &[..]u8) bool
+unsafe extern fn tl_http_query_int(req i64, name []u8, out &i64) bool
+unsafe extern fn tl_http_header(req i64, name []u8, out &[..]u8) bool
+unsafe extern fn tl_http_header_is(req i64, name []u8, value []u8) bool
+unsafe extern fn tl_http_body(req i64, out &[..]u8) bool
+unsafe extern fn tl_http_body_len(req i64) i64
+unsafe extern fn tl_http_status(req, code i64)
+unsafe extern fn tl_http_get_status(req i64) i64
+unsafe extern fn tl_http_set(req i64, key []u8, value []u8) bool
+unsafe extern fn tl_http_send(req i64, data []u8, append i64)
+unsafe extern fn tl_http_elapsed_us(req i64) i64
+unsafe extern fn tl_http_finish(req i64)
+unsafe extern fn tl_http_fail(req, code i64)
+unsafe extern fn tl_http_flush()
+
+type Method enum {
+    GET
+    HEAD
+    POST
+    PUT
+    DELETE
+    PATCH
+    OPTIONS
+}
+
+// Pengaturan server (http.Default() lalu ubah field yang perlu).
+type Config struct {
+    Workers i64           // goroutine yang menjalankan handler
+    MaxBody i64           // byte; lebih besar → 413
+    ReadTimeoutMs i64     // koneksi diam/terputus di tengah request ditutup
+    HandlerTimeoutMs i64  // handler yang tidak selesai: koneksinya ditutup
+    Queue i64             // request siap yang menunggu worker
+    Quiet bool            // jangan cetak "listening on ..."
+}
+
+fn Default() Config {
+    return Config{Workers: 64, MaxBody: 4194304, ReadTimeoutMs: 60000, HandlerTimeoutMs: 30000, Queue: 4096, Quiet: false}
+}
+
+type App struct {
+    srv i64
+    workers i64
+    queue i64
+    quiet bool
+}
+
+// Kumpulan route dengan prefix bersama: api := app.Group("/api").
+type Group struct {
+    srv i64
+    id i64
+}
+
+// Konteks satu request. Hanya hidup selama handler berjalan.
+type Ctx struct {
+    req i64
+}
+
+fn New(cfg Config) App {
+    srv := tl_http_new(cfg.MaxBody, cfg.ReadTimeoutMs, cfg.HandlerTimeoutMs)
+    if srv == 0 { panic("http: cannot create a server") }
+    var w = cfg.Workers
+    if w < 1 { w = 1 }
+    if w > 4096 { w = 4096 }
+    return App{srv: srv, workers: w, queue: cfg.Queue, quiet: cfg.Quiet}
+}
+
+fn route_err(code i64, path []u8) {
+    if code == 1 {
+        msg := str("http: invalid route pattern '", path, "'")
+        panic(msg)
+    }
+    if code == 2 {
+        msg := str("http: route '", path, "' is registered twice")
+        panic(msg)
+    }
+    if code == 3 { panic("http: routes must be added before Listen") }
+}
+
+// ---------------- route (App) ----------------
+
+fn (a App) root() Group { return Group{srv: a.srv, id: 0} }
+
+fn (a App) Get(path []u8, h func(&Ctx)) { a.root().Get(path, h) }
+fn (a App) Head(path []u8, h func(&Ctx)) { a.root().Head(path, h) }
+fn (a App) Post(path []u8, h func(&Ctx)) { a.root().Post(path, h) }
+fn (a App) Put(path []u8, h func(&Ctx)) { a.root().Put(path, h) }
+fn (a App) Delete(path []u8, h func(&Ctx)) { a.root().Delete(path, h) }
+fn (a App) Patch(path []u8, h func(&Ctx)) { a.root().Patch(path, h) }
+fn (a App) Options(path []u8, h func(&Ctx)) { a.root().Options(path, h) }
+fn (a App) All(path []u8, h func(&Ctx)) { a.root().All(path, h) }
+fn (a App) Use(mw func(&Ctx) bool) { a.root().Use(mw) }
+fn (a App) UseAt(prefix []u8, mw func(&Ctx) bool) { a.root().UseAt(prefix, mw) }
+fn (a App) After(h func(&Ctx)) { a.root().After(h) }
+fn (a App) Static(prefix []u8, dir []u8) { a.root().Static(prefix, dir) }
+
+// api := app.Group("/api");  api.Get("/users", list)   →  GET /api/users
+fn (a App) Group(prefix []u8) Group { return Group{srv: a.srv, id: tl_http_group(a.srv, 0, prefix)} }
+
+// ---------------- route (Group) ----------------
+
+fn (g Group) add(method i64, path []u8, h func(&Ctx)) { route_err(tl_http_route(g.srv, g.id, method, path, h), path) }
+
+fn (g Group) Get(path []u8, h func(&Ctx)) { g.add(0, path, h) }
+fn (g Group) Head(path []u8, h func(&Ctx)) { g.add(1, path, h) }
+fn (g Group) Post(path []u8, h func(&Ctx)) { g.add(2, path, h) }
+fn (g Group) Put(path []u8, h func(&Ctx)) { g.add(3, path, h) }
+fn (g Group) Delete(path []u8, h func(&Ctx)) { g.add(4, path, h) }
+fn (g Group) Patch(path []u8, h func(&Ctx)) { g.add(5, path, h) }
+fn (g Group) Options(path []u8, h func(&Ctx)) { g.add(6, path, h) }
+fn (g Group) All(path []u8, h func(&Ctx)) { g.add(-1, path, h) }
+
+// middleware untuk semua route di bawah grup ini yang didaftarkan SETELAH Use
+fn (g Group) Use(mw func(&Ctx) bool) { route_err(tl_http_use(g.srv, g.id, "", mw, 0), "") }
+fn (g Group) UseAt(prefix []u8, mw func(&Ctx) bool) { route_err(tl_http_use(g.srv, g.id, prefix, mw, 0), prefix) }
+// dijalankan setelah handler (juga untuk 404/405 bila global), mis. logger
+fn (g Group) After(h func(&Ctx)) { route_err(tl_http_after(g.srv, g.id, "", h, 1), "") }
+fn (g Group) Static(prefix []u8, dir []u8) { route_err(tl_http_static(g.srv, g.id, prefix, dir), prefix) }
+
+fn (g Group) Group(prefix []u8) Group { return Group{srv: g.srv, id: tl_http_group(g.srv, g.id, prefix)} }
+
+// ---------------- server ----------------
+
+// Mulai melayani; memblokir selamanya. Gagal bind → panic.
+fn (a App) Listen(addr []u8) {
+    if !a.ListenAddr(addr) {
+        msg := str("http: cannot listen on '", addr, "'")
+        panic(msg)
+    }
+    tl_http_wait(a.srv)
+}
+
+// Seperti Listen, tetapi mengembalikan false bila alamat tidak bisa dipakai.
+fn (a App) ListenAddr(addr []u8) bool {
+    if !tl_http_listen(a.srv, addr, a.queue) { return false }
+    for _i := range a.workers { _ = run supervise(a.srv) }
+    if !a.quiet {
+        print("listening on ", addr, " (port ", tl_http_port(a.srv), ")")
+        tl_http_flush()
+    }
+    return true
+}
+
+fn (a App) Port() i64 { return tl_http_port(a.srv) }
+
+// Worker yang mati karena abort diganti; selesai normal = server berhenti.
+fn supervise(srv i64) {
+    for {
+        t := run worker(srv)
+        if wait(t) { return }
+    }
+}
+
+fn worker(srv i64) {
+    for {
+        req := tl_http_next(srv)
+        if req == 0 { return }
+        serve(req)
+    }
+}
+
+// Satu request: middleware → handler → after. Panic di mana pun → 500, worker tetap hidup.
+fn serve(req i64) {
+    defer {
+        if some m := recover() {
+            msg := str("http: panic in handler: ", m, "\n")
+            write_stderr(msg)
+            tl_http_fail(req, 500)
+        }
+    }
+    var c = Ctx{req: req}
+    kind := tl_http_kind(req)
+    var go_on = true
+    n := tl_http_hook_count(req, 0)
+    for k := range n {
+        if go_on {
+            mw := tl_http_hook(req, 0, k)
+            if !mw(&c) { go_on = false }
+        }
+    }
+    if go_on {
+        if kind == 0 {
+            h := tl_http_handler(req)
+            h(&c)
+        } else {
+            tl_http_default(req)
+        }
+    }
+    na := tl_http_hook_count(req, 1)
+    for k := range na {
+        h := tl_http_after_hook(req, 1, k)
+        h(&c)
+    }
+    tl_http_finish(req)
+}
+
+// ---------------- Ctx: request ----------------
+
+fn (c Ctx) Method() Method {
+    m := tl_http_method(c.req)
+    if m == 1 { return Method.HEAD }
+    if m == 2 { return Method.POST }
+    if m == 3 { return Method.PUT }
+    if m == 4 { return Method.DELETE }
+    if m == 5 { return Method.PATCH }
+    if m == 6 { return Method.OPTIONS }
+    return Method.GET
+}
+
+fn (c Ctx) MethodName() [..]u8 {
+    m := tl_http_method(c.req)
+    if m == 1 { return str("HEAD") }
+    if m == 2 { return str("POST") }
+    if m == 3 { return str("PUT") }
+    if m == 4 { return str("DELETE") }
+    if m == 5 { return str("PATCH") }
+    if m == 6 { return str("OPTIONS") }
+    return str("GET")
+}
+
+// path ter-decode, tanpa query
+fn (c Ctx) Path() [..]u8 {
+    var out [..]u8
+    _ = tl_http_path(c.req, &out)
+    return out
+}
+
+fn (c Ctx) PathIs(p []u8) bool { return tl_http_path_is(c.req, p) }
+
+// parameter route (:id, *); kosong bila tidak ada
+fn (c Ctx) Param(name []u8) [..]u8 {
+    var out [..]u8
+    _ = tl_http_param(c.req, name, &out)
+    return out
+}
+
+fn (c Ctx) ParamInt(name []u8) i64? {
+    var v i64
+    if tl_http_param_int(c.req, name, &v) { return v }
+    return none
+}
+
+fn (c Ctx) Query(name []u8) [..]u8 {
+    var out [..]u8
+    _ = tl_http_query(c.req, name, &out)
+    return out
+}
+
+fn (c Ctx) QueryInt(name []u8) i64? {
+    var v i64
+    if tl_http_query_int(c.req, name, &v) { return v }
+    return none
+}
+
+fn (c Ctx) HasQuery(name []u8) bool {
+    var out [..]u8
+    return tl_http_query(c.req, name, &out)
+}
+
+// header request (nama tidak peka huruf besar/kecil); kosong bila tidak ada
+fn (c Ctx) Get(name []u8) [..]u8 {
+    var out [..]u8
+    _ = tl_http_header(c.req, name, &out)
+    return out
+}
+
+fn (c Ctx) HeaderIs(name []u8, value []u8) bool { return tl_http_header_is(c.req, name, value) }
+
+fn (c Ctx) Body() [..]u8 {
+    var out [..]u8
+    _ = tl_http_body(c.req, &out)
+    return out
+}
+
+fn (c Ctx) BodyLen() i64 { return tl_http_body_len(c.req) }
+
+// ---------------- Ctx: response ----------------
+
+fn (c Ctx) Status(code i64) { tl_http_status(c.req, code) }
+
+fn (c Ctx) StatusCode() i64 { return tl_http_get_status(c.req) }
+
+fn (c Ctx) Set(key []u8, value []u8) { _ = tl_http_set(c.req, key, value) }
+
+// Content-Type singkat: "json", "html", "text", "xml", "js", "css", atau tipe lengkap
+fn (c Ctx) Type(t []u8) {
+    if equal(t, "json") {
+        c.Set("Content-Type", "application/json")
+    } else if equal(t, "html") {
+        c.Set("Content-Type", "text/html; charset=utf-8")
+    } else if equal(t, "text") {
+        c.Set("Content-Type", "text/plain; charset=utf-8")
+    } else if equal(t, "xml") {
+        c.Set("Content-Type", "application/xml")
+    } else if equal(t, "js") {
+        c.Set("Content-Type", "text/javascript; charset=utf-8")
+    } else if equal(t, "css") {
+        c.Set("Content-Type", "text/css; charset=utf-8")
+    } else {
+        c.Set("Content-Type", t)
+    }
+}
+
+// ganti body respons
+fn (c Ctx) Send(data []u8) { tl_http_send(c.req, data, 0) }
+fn (c Ctx) SendString(s []u8) { tl_http_send(c.req, s, 0) }
+// tambahkan ke body respons
+fn (c Ctx) Write(data []u8) { tl_http_send(c.req, data, 1) }
+
+// body JSON yang sudah disusun pemanggil
+fn (c Ctx) JSON(body []u8) {
+    c.Type("json")
+    tl_http_send(c.req, body, 0)
+}
+
+fn (c Ctx) SendStatus(code i64) {
+    tl_http_status(c.req, code)
+    msg := str(code)
+    tl_http_send(c.req, msg, 0)
+}
+
+fn (c Ctx) Redirect(url []u8, code i64) {
+    var k = code
+    if k < 300 || k > 399 { k = 302 }
+    tl_http_status(c.req, k)
+    _ = tl_http_set(c.req, "Location", url)
+}
+
+// mikrodetik sejak request diterima
+fn (c Ctx) ElapsedUs() i64 { return tl_http_elapsed_us(c.req) }
+
+// ---------------- middleware bawaan ----------------
+
+// app.After(http.Logger): "GET /users/7 200 85us"
+fn Logger(c &Ctx) {
+    m := c.MethodName()
+    p := c.Path()
+    line := str(m, " ", p, " ", c.StatusCode(), " ", c.ElapsedUs(), "us")
+    print(line)
+    tl_http_flush()
+}
